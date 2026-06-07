@@ -37,9 +37,9 @@ jobs:
         run: |
           CHALLENGE_DIR="challenge-tests/challenge-${{ inputs.challenge_id }}"
           echo "${{ inputs.candidate_code }}" | base64 -d > \
-            ${CHALLENGE_DIR}/src/main/java/com/assessment/CandidateSubmission.java
+            ${CHALLENGE_DIR}/src/main/java/com/assessment/CANDIDATE_SUBMISSION.java
           echo "Injected code into ${CHALLENGE_DIR}"
-          cat ${CHALLENGE_DIR}/src/main/java/com/assessment/CandidateSubmission.java | head -5
+          cat ${CHALLENGE_DIR}/src/main/java/com/assessment/CANDIDATE_SUBMISSION.java | head -5
 
       - name: Run tests
         id: run_tests
