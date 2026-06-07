@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: challenge-solutions
+  # H2 embedded DB — always active so challenge-3's JPA repository is available
+  datasource:
+    url: jdbc:h2:mem:solutionsdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+server:
+  port: 8080

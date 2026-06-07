@@ -1,0 +1,4 @@
+security:
+  jwt:
+    secret: assessment-challenge-6-super-secret-signing-key-please-change-0123456789
+    expiry-ms: 3600000

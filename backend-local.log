@@ -1,0 +1,101 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------< com.assessment:javamsainterviewer >------------------
+[INFO] Building javamsainterviewer 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.2.0:run (default-cli) > test-compile @ javamsainterviewer >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ javamsainterviewer ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ javamsainterviewer ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ javamsainterviewer ---
+[INFO] skip non existing resourceDirectory D:\JavaMsaInterviewer\backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ javamsainterviewer ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] <<< spring-boot:3.2.0:run (default-cli) < test-compile @ javamsainterviewer <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.2.0:run (default-cli) @ javamsainterviewer ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-06-07T15:43:07.465+01:00  INFO 15988 --- [           main] com.assessment.AssessmentApplication     : Starting AssessmentApplication using Java 20.0.1 with PID 15988 (D:\JavaMsaInterviewer\backend\target\classes started by ASUS in D:\JavaMsaInterviewer\backend)
+2026-06-07T15:43:07.472+01:00  INFO 15988 --- [           main] com.assessment.AssessmentApplication     : The following 1 profile is active: "local"
+2026-06-07T15:43:08.396+01:00  INFO 15988 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-07T15:43:08.551+01:00  INFO 15988 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 147 ms. Found 3 JPA repository interfaces.
+2026-06-07T15:43:09.352+01:00  INFO 15988 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-06-07T15:43:09.363+01:00  INFO 15988 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-06-07T15:43:09.363+01:00  INFO 15988 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-06-07T15:43:09.438+01:00  INFO 15988 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-06-07T15:43:09.439+01:00  INFO 15988 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1869 ms
+2026-06-07T15:43:09.488+01:00  INFO 15988 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-06-07T15:43:09.707+01:00  INFO 15988 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:msainterviewer user=SA
+2026-06-07T15:43:09.708+01:00  INFO 15988 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-06-07T15:43:09.717+01:00  INFO 15988 --- [           main] o.s.b.a.h2.H2ConsoleAutoConfiguration    : H2 console available at '/h2-console'. Database available at 'jdbc:h2:mem:msainterviewer'
+2026-06-07T15:43:09.885+01:00  INFO 15988 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-06-07T15:43:09.955+01:00  INFO 15988 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.3.1.Final
+2026-06-07T15:43:09.996+01:00  INFO 15988 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-06-07T15:43:10.219+01:00  INFO 15988 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-07T15:43:10.275+01:00  WARN 15988 --- [           main] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-06-07T15:43:11.230+01:00  INFO 15988 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-07T15:43:11.291+01:00  INFO 15988 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-07T15:43:12.168+01:00  WARN 15988 --- [           main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-06-07T15:43:12.196+01:00  WARN 15988 --- [           main] .s.s.UserDetailsServiceAutoConfiguration : 
+
+Using generated security password: 27f8b272-c725-4378-9b94-dd4f17840829
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-06-07T15:43:12.941+01:00  INFO 15988 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2026-06-07T15:43:12.943+01:00  INFO 15988 --- [           main] o.s.m.s.b.SimpleBrokerMessageHandler     : Starting...
+2026-06-07T15:43:12.944+01:00  INFO 15988 --- [           main] o.s.m.s.b.SimpleBrokerMessageHandler     : BrokerAvailabilityEvent[available=true, SimpleBrokerMessageHandler [org.springframework.messaging.simp.broker.DefaultSubscriptionRegistry@4177d427]]
+2026-06-07T15:43:12.945+01:00  INFO 15988 --- [           main] o.s.m.s.b.SimpleBrokerMessageHandler     : Started.
+2026-06-07T15:43:12.951+01:00  INFO 15988 --- [           main] com.assessment.AssessmentApplication     : Started AssessmentApplication in 6.098 seconds (process running for 6.51)
+2026-06-07T15:43:13.268+01:00  INFO 15988 --- [           main] com.assessment.config.DataInitializer    : Seeding challenge data for local profile...
+2026-06-07T15:43:13.315+01:00  INFO 15988 --- [           main] com.assessment.config.DataInitializer    : Seeded 6 challenges successfully.
+2026-06-07T15:44:12.916+01:00  INFO 15988 --- [MessageBroker-1] o.s.w.s.c.WebSocketMessageBrokerStats    : WebSocketSession[0 current WS(0)-HttpStream(0)-HttpPoll(0), 0 total, 0 closed abnormally (0 connect failure, 0 send limit, 0 transport error)], stompSubProtocol[processed CONNECT(0)-CONNECTED(0)-DISCONNECT(0)], stompBrokerRelay[null], inboundChannel[pool size = 0, active threads = 0, queued tasks = 0, completed tasks = 0], outboundChannel[pool size = 0, active threads = 0, queued tasks = 0, completed tasks = 0], sockJsScheduler[pool size = 1, active threads = 1, queued tasks = 0, completed tasks = 0]
+2026-06-07T15:47:03.200+01:00  INFO 15988 --- [nio-8080-exec-5] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-06-07T15:47:03.201+01:00  INFO 15988 --- [nio-8080-exec-5] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-06-07T15:47:03.202+01:00  INFO 15988 --- [nio-8080-exec-5] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-06-07T15:47:03.219+01:00  WARN 15988 --- [nio-8080-exec-5] o.s.w.s.h.HandlerMappingIntrospector     : Cache miss for REQUEST dispatch to '/api/challenges' (previous null). Performing MatchableHandlerMapping lookup. This is logged once only at WARN level, and every time at TRACE.
+2026-06-07T16:04:53.678+01:00  INFO 15988 --- [nio-8080-exec-1] c.a.controller.SubmissionController      : Submission for session=630a1bbe-4115-46f8-b9d8-4b9edde33490 challenge=1
+2026-06-07T16:04:53.948+01:00  INFO 15988 --- [nio-8080-exec-1] .s.a.AnnotationAsyncExecutionInterceptor : More than one TaskExecutor bean found within the context, and none is named 'taskExecutor'. Mark one of them as primary or name it 'taskExecutor' (possibly as an alias) in order to use it for async processing: [clientInboundChannelExecutor, clientOutboundChannelExecutor, brokerChannelExecutor]
+2026-06-07T16:04:53.952+01:00  WARN 15988 --- [cTaskExecutor-1] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session 630a1bbe-4115-46f8-b9d8-4b9edde33490
+2026-06-07T16:05:55.721+01:00  INFO 15988 --- [nio-8080-exec-3] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T16:05:55.731+01:00  WARN 15988 --- [cTaskExecutor-2] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T16:11:12.388+01:00  INFO 15988 --- [nio-8080-exec-2] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T16:11:12.650+01:00  WARN 15988 --- [cTaskExecutor-3] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T16:11:33.213+01:00  INFO 15988 --- [nio-8080-exec-8] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T16:11:33.223+01:00  WARN 15988 --- [cTaskExecutor-4] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T16:11:38.536+01:00  INFO 15988 --- [nio-8080-exec-9] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T16:11:38.543+01:00  WARN 15988 --- [cTaskExecutor-5] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T16:14:12.939+01:00  INFO 15988 --- [essageBroker-12] o.s.w.s.c.WebSocketMessageBrokerStats    : WebSocketSession[2 current WS(2)-HttpStream(0)-HttpPoll(0), 3 total, 0 closed abnormally (0 connect failure, 0 send limit, 1 transport error)], stompSubProtocol[processed CONNECT(3)-CONNECTED(3)-DISCONNECT(0)], stompBrokerRelay[null], inboundChannel[pool size = 0, active threads = 0, queued tasks = 0, completed tasks = 21], outboundChannel[pool size = 0, active threads = 0, queued tasks = 0, completed tasks = 14], sockJsScheduler[pool size = 12, active threads = 1, queued tasks = 3, completed tasks = 154]
+2026-06-07T17:22:35.438+01:00  INFO 15988 --- [MessageBroker-8] o.s.w.s.c.WebSocketMessageBrokerStats    : WebSocketSession[0 current WS(0)-HttpStream(0)-HttpPoll(0), 3 total, 0 closed abnormally (0 connect failure, 0 send limit, 3 transport error)], stompSubProtocol[processed CONNECT(3)-CONNECTED(3)-DISCONNECT(0)], stompBrokerRelay[null], inboundChannel[pool size = 6, active threads = 0, queued tasks = 0, completed tasks = 27], outboundChannel[pool size = 2, active threads = 0, queued tasks = 0, completed tasks = 16], sockJsScheduler[pool size = 12, active threads = 1, queued tasks = 1, completed tasks = 1061]
+2026-06-07T17:22:54.677+01:00  WARN 15988 --- [l-1 housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=50m43s951ms795µs400ns).
+2026-06-07T17:23:21.259+01:00  INFO 15988 --- [nio-8080-exec-8] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T17:23:21.319+01:00  WARN 15988 --- [cTaskExecutor-6] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T17:23:26.026+01:00  INFO 15988 --- [nio-8080-exec-9] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T17:23:26.044+01:00  WARN 15988 --- [cTaskExecutor-7] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T17:23:36.618+01:00  INFO 15988 --- [nio-8080-exec-2] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T17:23:36.626+01:00  WARN 15988 --- [cTaskExecutor-8] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T17:33:11.684+01:00  INFO 15988 --- [nio-8080-exec-4] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T17:33:12.044+01:00  WARN 15988 --- [cTaskExecutor-9] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T17:33:34.695+01:00  INFO 15988 --- [nio-8080-exec-5] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T17:33:34.764+01:00  WARN 15988 --- [TaskExecutor-10] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
+2026-06-07T17:33:53.136+01:00  INFO 15988 --- [nio-8080-exec-1] c.a.controller.SubmissionController      : Submission for session=bac86dda-07b6-4eec-bd89-b7574f80ce65 challenge=1
+2026-06-07T17:33:53.158+01:00  WARN 15988 --- [TaskExecutor-11] c.a.service.GitHubActionsService         : GitHub not configured — skipping deep evaluation for session bac86dda-07b6-4eec-bd89-b7574f80ce65
