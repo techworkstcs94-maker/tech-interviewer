@@ -40,70 +40,111 @@ jobs:
           {
             echo "package com.assessment;"
             echo ""
+            # Universal imports — available in ALL challenges via spring-boot-starter-web
             echo "import org.springframework.web.bind.annotation.*;"
             echo "import org.springframework.http.*;"
             echo "import org.springframework.stereotype.*;"
             echo "import org.springframework.beans.factory.annotation.*;"
             echo "import org.springframework.context.annotation.*;"
-            echo "import org.springframework.security.config.annotation.web.builders.*;"
-            echo "import org.springframework.security.config.http.*;"
-            echo "import org.springframework.security.web.*;"
-            echo "import org.springframework.security.web.authentication.*;"
+            echo "import org.springframework.web.context.request.*;"
             echo "import org.springframework.web.filter.*;"
-            echo "import org.springframework.data.jpa.repository.*;"
-            echo "import org.springframework.data.repository.query.*;"
-            echo "import org.springframework.web.reactive.function.client.*;"
-            echo "import io.github.resilience4j.circuitbreaker.annotation.*;"
-            echo "import io.jsonwebtoken.*;"
-            echo "import io.jsonwebtoken.security.*;"
-            echo "import jakarta.persistence.*;"
             echo "import jakarta.servlet.*;"
             echo "import jakarta.servlet.http.*;"
             echo "import java.util.*;"
+            echo "import java.util.stream.*;"
+            echo "import java.util.function.*;"
+            echo "import java.util.concurrent.*;"
             echo "import java.util.concurrent.atomic.*;"
             echo "import java.time.*;"
             echo "import java.io.*;"
+            echo "import java.math.*;"
             echo ""
+            # Challenge-specific imports (only inject what each pom.xml provides)
+            case "${{ inputs.challenge_id }}" in
+              3)
+                echo "import jakarta.persistence.*;"
+                echo "import org.springframework.data.jpa.repository.*;"
+                echo "import org.springframework.data.repository.query.*;"
+                echo ""
+                ;;
+              5)
+                echo "import org.springframework.web.reactive.function.client.*;"
+                echo "import io.github.resilience4j.circuitbreaker.annotation.*;"
+                echo ""
+                ;;
+              6)
+                echo "import org.springframework.security.config.annotation.web.builders.*;"
+                echo "import org.springframework.security.config.http.*;"
+                echo "import org.springframework.security.web.*;"
+                echo "import org.springframework.security.web.authentication.*;"
+                echo "import org.springframework.security.core.*;"
+                echo "import org.springframework.security.core.context.*;"
+                echo "import org.springframework.security.core.userdetails.*;"
+                echo "import io.jsonwebtoken.*;"
+                echo "import io.jsonwebtoken.security.*;"
+                echo ""
+                ;;
+            esac
             echo "${{ inputs.candidate_code }}" | base64 -d \
-              | sed 's/^package .*;$//' \
-              | sed 's/^import .*;$//' \
+              | sed '/^package /d' \
+              | sed '/^import /d' \
               | sed 's/^public class /class /g' \
               | sed 's/^public interface /interface /g' \
               | sed 's/^public enum /enum /g'
           } > "$TARGET"
-          echo "Injected code into ${CHALLENGE_DIR}"
-          head -5 "$TARGET"
+          echo "=== Injected: ${TARGET} ==="
+          cat "$TARGET"
 
       - name: Run tests
         id: run_tests
         run: |
           cd challenge-tests/challenge-${{ inputs.challenge_id }}
-          mvn test -q --no-transfer-progress 2>&1 | tee test_output.txt
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          mvn test --no-transfer-progress 2>&1 | tee test_output.txt
         continue-on-error: true
 
       - name: Parse and report results
         run: |
           cd challenge-tests/challenge-${{ inputs.challenge_id }}
 
-          TESTS_RUN=$(grep -oP 'Tests run: \K[0-9]+' test_output.txt | head -1 || echo "0")
-          FAILURES=$(grep -oP 'Failures: \K[0-9]+' test_output.txt | head -1 || echo "0")
-          ERRORS=$(grep -oP 'Errors: \K[0-9]+' test_output.txt | head -1 || echo "0")
+          echo "=== Test output (last 80 lines) ==="
+          tail -80 test_output.txt
 
-          if [ -z "$TESTS_RUN" ] || [ "$TESTS_RUN" = "0" ]; then
-            TESTS_RUN=0
-            FAILURES=0
-            ERRORS=0
+          # Primary: parse Surefire XML reports (most reliable)
+          REPORT_DIR="target/surefire-reports"
+          TESTS_RUN=0
+          FAILURES=0
+          ERRORS=0
+
+          if ls "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | head -1 | grep -q .; then
+            TESTS_RUN=$(grep -h '<testsuite' "${REPORT_DIR}"/TEST-*.xml \
+              | grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            FAILURES=$(grep -h '<testsuite' "${REPORT_DIR}"/TEST-*.xml \
+              | grep -oP 'failures="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            ERRORS=$(grep -h '<testsuite' "${REPORT_DIR}"/TEST-*.xml \
+              | grep -oP 'errors="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            echo "Parsed from XML: tests=$TESTS_RUN failures=$FAILURES errors=$ERRORS"
           fi
 
+          # Fallback: parse stdout summary line
+          if [ "${TESTS_RUN}" -eq 0 ]; then
+            TESTS_RUN=$(grep -oP 'Tests run: \K[0-9]+' test_output.txt | tail -1 || echo "0")
+            FAILURES=$(grep -oP 'Failures: \K[0-9]+' test_output.txt | tail -1 || echo "0")
+            ERRORS=$(grep -oP 'Errors: \K[0-9]+' test_output.txt | tail -1 || echo "0")
+            echo "Parsed from stdout: tests=$TESTS_RUN failures=$FAILURES errors=$ERRORS"
+          fi
+
+          TESTS_RUN=${TESTS_RUN:-0}
+          FAILURES=${FAILURES:-0}
+          ERRORS=${ERRORS:-0}
+
           ACTUAL_PASSED=$(( TESTS_RUN - FAILURES - ERRORS ))
-          if [ "$TESTS_RUN" -gt 0 ]; then
+          if [ "${TESTS_RUN}" -gt 0 ]; then
             SCORE=$(( ACTUAL_PASSED * 100 / TESTS_RUN ))
           else
             SCORE=0
           fi
 
-          RAW_OUTPUT=$(cat test_output.txt | head -50 | base64 -w 0 || echo "")
+          RAW_OUTPUT=$(tail -100 test_output.txt | base64 -w 0 || echo "")
 
           echo "Tests: $TESTS_RUN, Passed: $ACTUAL_PASSED, Score: $SCORE"
 
@@ -119,4 +160,4 @@ jobs:
               \"raw_output\": \"${RAW_OUTPUT}\"
             }" \
             && echo "Callback sent successfully" \
-            || echo "Callback failed (backend may not be configured)"
+            || echo "Callback failed"
