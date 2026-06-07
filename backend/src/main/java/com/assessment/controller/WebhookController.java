@@ -64,7 +64,12 @@ public class WebhookController {
         }
 
         submissionRepository.save(submission);
-        webSocketService.sendDeepResult(payload.getSessionId(), payload);
+        webSocketService.sendDeepResult(payload.getSessionId(), Map.of(
+                "deepScore", payload.getDeepScore() != null ? payload.getDeepScore() : 0,
+                "passedCount", payload.getPassedCount() != null ? payload.getPassedCount() : 0,
+                "totalCount", payload.getTotalCount() != null ? payload.getTotalCount() : 0,
+                "rawOutput", payload.getRawOutput() != null ? payload.getRawOutput() : ""
+        ));
 
         return ResponseEntity.ok(Map.of("status", "processed"));
     }

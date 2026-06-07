@@ -28,3 +28,8 @@ AggregateError [ECONNREFUSED]:
 AggregateError [ECONNREFUSED]: 
     at internalConnectMultiple (node:net:1134:18)
     at afterConnectMultiple (node:net:1715:7)
+[2m8:54:03 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/Landing.tsx, /src/index.css[22m
+[2m8:54:08 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/ChallengeArena.tsx[22m
+[2m8:54:13 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/ChallengeArena.tsx, /src/index.css[22m
+[2m8:54:19 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/ChallengeArena.tsx, /src/index.css[22m
+[2m8:54:44 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TestResults.tsx, /src/index.css[22m

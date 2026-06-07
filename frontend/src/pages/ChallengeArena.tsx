@@ -34,7 +34,7 @@ export default function ChallengeArena() {
   const [submitError, setSubmitError] = useState('')
 
   const { instantResults, deepResults, logs, deepStatus, isConnected } = useWebSocket(sessionId)
-  const { save, load } = useSnapshots()
+  const { save, load } = useSnapshots(sessionId)
 
   const activeChallenge = challenges[activeIdx]
   const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600)
@@ -243,7 +243,7 @@ export default function ChallengeArena() {
           </div>
 
           {/* Bottom: Log */}
-          <div className="h-48 shrink-0 border-t border-[var(--border)]">
+          <div className="h-28 shrink-0 border-t border-[var(--border)]">
             <AnalysisLog logs={logs} isConnected={isConnected} />
           </div>
         </div>

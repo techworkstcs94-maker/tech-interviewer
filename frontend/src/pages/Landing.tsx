@@ -117,7 +117,7 @@ export default function Landing() {
               View all candidate sessions, scores, and detailed code submissions
             </p>
             <div className="mt-4 text-xs text-[var(--muted)]">
-              Login: admin / admin123
+              Secure recruiter dashboard
             </div>
           </button>
         </div>

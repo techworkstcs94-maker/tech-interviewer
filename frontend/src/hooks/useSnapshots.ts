@@ -1,29 +1,29 @@
 import { useCallback } from 'react'
 
-const PREFIX = 'javamsa_code_'
+export function useSnapshots(sessionId: string | null) {
+  const prefix = sessionId ? `javamsa_code_${sessionId}_` : `javamsa_code_`
 
-export function useSnapshots() {
   const save = useCallback((challengeId: number, code: string) => {
     try {
-      localStorage.setItem(`${PREFIX}${challengeId}`, code)
+      localStorage.setItem(`${prefix}${challengeId}`, code)
     } catch {
       // Ignore storage errors
     }
-  }, [])
+  }, [prefix])
 
   const load = useCallback((challengeId: number): string | null => {
     try {
-      return localStorage.getItem(`${PREFIX}${challengeId}`)
+      return localStorage.getItem(`${prefix}${challengeId}`)
     } catch {
       return null
     }
-  }, [])
+  }, [prefix])
 
   const clear = useCallback((challengeId: number) => {
     try {
-      localStorage.removeItem(`${PREFIX}${challengeId}`)
+      localStorage.removeItem(`${prefix}${challengeId}`)
     } catch {}
-  }, [])
+  }, [prefix])
 
   return { save, load, clear }
 }
