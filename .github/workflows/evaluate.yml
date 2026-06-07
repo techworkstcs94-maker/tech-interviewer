@@ -48,6 +48,7 @@ jobs:
             echo "import org.springframework.context.annotation.*;"
             echo "import org.springframework.web.context.request.*;"
             echo "import org.springframework.web.filter.*;"
+            echo "import org.springframework.web.server.*;"
             echo "import jakarta.servlet.*;"
             echo "import jakarta.servlet.http.*;"
             echo "import java.util.*;"
