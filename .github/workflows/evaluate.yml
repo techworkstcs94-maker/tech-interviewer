@@ -36,10 +36,43 @@ jobs:
       - name: Inject candidate code
         run: |
           CHALLENGE_DIR="challenge-tests/challenge-${{ inputs.challenge_id }}"
-          echo "${{ inputs.candidate_code }}" | base64 -d > \
-            ${CHALLENGE_DIR}/src/main/java/com/assessment/CandidateSubmission.java
+          TARGET="${CHALLENGE_DIR}/src/main/java/com/assessment/CandidateSubmission.java"
+          {
+            echo "package com.assessment;"
+            echo ""
+            echo "import org.springframework.web.bind.annotation.*;"
+            echo "import org.springframework.http.*;"
+            echo "import org.springframework.stereotype.*;"
+            echo "import org.springframework.beans.factory.annotation.*;"
+            echo "import org.springframework.context.annotation.*;"
+            echo "import org.springframework.security.config.annotation.web.builders.*;"
+            echo "import org.springframework.security.config.http.*;"
+            echo "import org.springframework.security.web.*;"
+            echo "import org.springframework.security.web.authentication.*;"
+            echo "import org.springframework.web.filter.*;"
+            echo "import org.springframework.data.jpa.repository.*;"
+            echo "import org.springframework.data.repository.query.*;"
+            echo "import org.springframework.web.reactive.function.client.*;"
+            echo "import io.github.resilience4j.circuitbreaker.annotation.*;"
+            echo "import io.jsonwebtoken.*;"
+            echo "import io.jsonwebtoken.security.*;"
+            echo "import jakarta.persistence.*;"
+            echo "import jakarta.servlet.*;"
+            echo "import jakarta.servlet.http.*;"
+            echo "import java.util.*;"
+            echo "import java.util.concurrent.atomic.*;"
+            echo "import java.time.*;"
+            echo "import java.io.*;"
+            echo ""
+            echo "${{ inputs.candidate_code }}" | base64 -d \
+              | sed 's/^package .*;$//' \
+              | sed 's/^import .*;$//' \
+              | sed 's/^public class /class /g' \
+              | sed 's/^public interface /interface /g' \
+              | sed 's/^public enum /enum /g'
+          } > "$TARGET"
           echo "Injected code into ${CHALLENGE_DIR}"
-          cat ${CHALLENGE_DIR}/src/main/java/com/assessment/CandidateSubmission.java | head -5
+          head -5 "$TARGET"
 
       - name: Run tests
         id: run_tests
