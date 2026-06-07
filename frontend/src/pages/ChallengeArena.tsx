@@ -33,10 +33,9 @@ export default function ChallengeArena() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  const { instantResults, deepResults, logs, deepStatus, isConnected } = useWebSocket(sessionId)
-  const { save, load } = useSnapshots(sessionId)
-
   const activeChallenge = challenges[activeIdx]
+  const { instantResults, deepResults, logs, deepStatus, isConnected } = useWebSocket(sessionId, activeChallenge?.id ?? null)
+  const { save, load } = useSnapshots(sessionId)
   const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600)
 
   // Auto-save every 30s

@@ -8,12 +8,16 @@ import com.assessment.repository.SubmissionRepository;
 import com.assessment.service.CodeAnalysisService;
 import com.assessment.service.GitHubActionsService;
 import com.assessment.service.WebSocketService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/submissions")
@@ -64,5 +68,38 @@ public class SubmissionController {
                 result.getQualityScore(),
                 submission.getStatus().name()
         ));
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<Map<String, Object>> getStatus(
+            @RequestParam String sessionId,
+            @RequestParam Long challengeId) {
+
+        return submissionRepository.findBySessionIdAndChallengeId(sessionId, challengeId)
+                .map(sub -> {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", sub.getStatus().name());
+                    response.put("deepScore", sub.getDeepScore() != null ? sub.getDeepScore() : 0);
+
+                    if (sub.getDeepResults() != null) {
+                        try {
+                            Map<String, Object> deepResults = objectMapper.readValue(
+                                    sub.getDeepResults(), new TypeReference<>() {});
+                            response.put("passedCount", deepResults.getOrDefault("passedCount", 0));
+                            response.put("totalCount", deepResults.getOrDefault("totalCount", 0));
+                            response.put("rawOutput", deepResults.getOrDefault("rawOutput", ""));
+                        } catch (Exception e) {
+                            response.put("passedCount", 0);
+                            response.put("totalCount", 0);
+                            response.put("rawOutput", "");
+                        }
+                    } else {
+                        response.put("passedCount", 0);
+                        response.put("totalCount", 0);
+                        response.put("rawOutput", "");
+                    }
+                    return ResponseEntity.ok(response);
+                })
+                .orElse(ResponseEntity.notFound().build());
     }
 }

@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/challenges").permitAll()
                 .requestMatchers("/api/challenges/**").permitAll()
+                .requestMatchers("/api/submissions/status").permitAll()
                 .requestMatchers("/api/recruiter/**").hasRole("RECRUITER")
                 .anyRequest().authenticated()
             )
