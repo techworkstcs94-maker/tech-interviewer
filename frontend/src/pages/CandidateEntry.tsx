@@ -7,7 +7,14 @@ export default function CandidateEntry() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingMsg, setLoadingMsg] = useState('Starting...')
   const [error, setError] = useState('')
+
+  // Also warm up the backend when this page loads (in case user navigated
+  // directly to /start without visiting the landing page first)
+  React.useEffect(() => {
+    fetch('/api/challenges').catch(() => {})
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -16,15 +23,33 @@ export default function CandidateEntry() {
       return
     }
     setLoading(true)
+    setLoadingMsg('Starting...')
     setError('')
+
+    const attempt = async (retries: number): Promise<void> => {
+      try {
+        const res = await startSession(name.trim(), email.trim())
+        localStorage.setItem('token', res.token)
+        localStorage.setItem('sessionId', res.sessionId)
+        localStorage.setItem('candidateName', res.candidateName)
+        navigate('/challenge')
+      } catch (err: any) {
+        const isTimeout = !err.response || err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK'
+        if (retries > 0 && isTimeout) {
+          setLoadingMsg('Backend is waking up, retrying...')
+          await new Promise(r => setTimeout(r, 5000))
+          return attempt(retries - 1)
+        }
+        if (isTimeout) {
+          setError('Backend is still starting up. Please wait 30 seconds and try again.')
+        } else {
+          setError(`Failed to start session: ${err.response?.data?.message ?? err.message}`)
+        }
+      }
+    }
+
     try {
-      const res = await startSession(name.trim(), email.trim())
-      localStorage.setItem('token', res.token)
-      localStorage.setItem('sessionId', res.sessionId)
-      localStorage.setItem('candidateName', res.candidateName)
-      navigate('/challenge')
-    } catch (err) {
-      setError('Failed to start session. Please try again.')
+      await attempt(2)
     } finally {
       setLoading(false)
     }
@@ -76,7 +101,7 @@ export default function CandidateEntry() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                Starting...
+                {loadingMsg}
               </span>
             ) : 'Start Assessment →'}
           </button>

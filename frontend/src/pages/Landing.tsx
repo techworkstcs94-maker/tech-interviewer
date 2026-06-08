@@ -27,6 +27,14 @@ export default function Landing() {
   const [lineIdx, setLineIdx] = useState(0)
   const [charIdx, setCharIdx] = useState(0)
 
+  // Silently wake up the Render backend on page load.
+  // Render free tier sleeps after 15 min; cold start takes up to 60s.
+  // This ping fires while the user reads the landing page so the backend
+  // is awake by the time they click "Start Assessment".
+  useEffect(() => {
+    fetch('/api/challenges').catch(() => {/* ignore — just a warm-up */})
+  }, [])
+
   useEffect(() => {
     if (lineIdx >= CODE_LINES.length) return
     const line = CODE_LINES[lineIdx]
