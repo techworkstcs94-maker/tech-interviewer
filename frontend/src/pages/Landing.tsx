@@ -27,12 +27,25 @@ export default function Landing() {
   const [lineIdx, setLineIdx] = useState(0)
   const [charIdx, setCharIdx] = useState(0)
 
-  // Silently wake up the Render backend on page load.
-  // Render free tier sleeps after 15 min; cold start takes up to 60s.
-  // This ping fires while the user reads the landing page so the backend
-  // is awake by the time they click "Start Assessment".
+  // Poll the backend until it responds, then cache readiness in localStorage.
+  // CandidateEntry reads this cache — if the user spent any time on this page
+  // the backend will already be confirmed awake before they hit "Start Assessment".
   useEffect(() => {
-    fetch('/api/challenges').catch(() => {/* ignore — just a warm-up */})
+    let stopped = false
+    const poll = async () => {
+      while (!stopped) {
+        try {
+          const res = await fetch('/api/challenges', { signal: AbortSignal.timeout(8000) })
+          if (res.ok) {
+            localStorage.setItem('backendReady', Date.now().toString())
+            return
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 3000))
+      }
+    }
+    poll()
+    return () => { stopped = true }
   }, [])
 
   useEffect(() => {

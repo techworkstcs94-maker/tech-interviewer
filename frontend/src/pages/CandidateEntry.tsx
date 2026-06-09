@@ -11,39 +11,49 @@ export default function CandidateEntry() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [backendState, setBackendState] = useState<BackendState>('checking')
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const startedAt = useRef(Date.now())
 
   // Poll /api/challenges until the backend responds 200.
-  // Render free tier can take up to 60s to wake from sleep.
-  // We gate the submit button on backend readiness so the user
-  // never attempts login against a sleeping server.
+  // Fast-path: if Landing page already confirmed readiness within the last 2 min,
+  // skip polling entirely — the backend is already awake.
   useEffect(() => {
+    const cached = localStorage.getItem('backendReady')
+    if (cached && Date.now() - Number(cached) < 120_000) {
+      setBackendState('ready')
+      return
+    }
+
+    let stopped = false
     let attempts = 0
 
     const ping = async () => {
+      if (stopped) return
       attempts++
       try {
-        const res = await fetch('/api/challenges', { signal: AbortSignal.timeout(8000) })
+        const res = await fetch('/api/challenges', { signal: AbortSignal.timeout(5000) })
         if (res.ok) {
-          clearInterval(pollRef.current!)
+          localStorage.setItem('backendReady', Date.now().toString())
           setBackendState('ready')
+          stopped = true
           return
         }
       } catch {}
 
+      if (stopped) return
       const elapsed = Date.now() - startedAt.current
       if (elapsed > 90_000) {
-        clearInterval(pollRef.current!)
         setBackendState('timeout')
+        stopped = true
       } else if (attempts >= 2) {
         setBackendState('waking')
       }
+
+      if (!stopped) pollRef.current = setTimeout(ping, 2000)
     }
 
     ping()
-    pollRef.current = setInterval(ping, 4000)
-    return () => clearInterval(pollRef.current!)
+    return () => { stopped = true; clearTimeout(pollRef.current!) }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
