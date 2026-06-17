@@ -9,7 +9,8 @@ import RecruiterDashboard from './pages/RecruiterDashboard'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
-  if (!token) return <Navigate to="/start" replace />
+  const sessionId = localStorage.getItem('sessionId')
+  if (!token || !sessionId) return <Navigate to="/start" replace />
   return <>{children}</>
 }
 

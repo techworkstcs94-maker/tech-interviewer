@@ -34,8 +34,6 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/webhook/**").permitAll()
                 .requestMatchers("/ws/**").permitAll()
-                .requestMatchers("/api/challenges").permitAll()
-                .requestMatchers("/api/challenges/**").permitAll()
                 .requestMatchers("/api/submissions/status").permitAll()
                 .requestMatchers("/api/recruiter/**").hasRole("RECRUITER")
                 .anyRequest().authenticated()

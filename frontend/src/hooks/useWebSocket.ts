@@ -26,6 +26,7 @@ export function useWebSocket(
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryDelay = useRef(1000)
   const deepStatusRef = useRef<'idle' | 'running' | 'done' | 'error'>('idle')
+  const connectedOnce = useRef(false)
 
   // Keep ref in sync so callbacks always see current deepStatus
   useEffect(() => { deepStatusRef.current = deepStatus }, [deepStatus])
@@ -97,6 +98,12 @@ export function useWebSocket(
   const connect = useCallback(() => {
     if (!sessionId) return
 
+    // Deactivate any existing client before creating a new one to avoid duplicate subscriptions
+    if (clientRef.current) {
+      clientRef.current.deactivate()
+      clientRef.current = null
+    }
+
     const wsUrl = `${apiUrl}/ws`
     const client = new Client({
       webSocketFactory: () => new SockJS(wsUrl) as unknown as WebSocket,
@@ -104,7 +111,10 @@ export function useWebSocket(
       onConnect: () => {
         setIsConnected(true)
         retryDelay.current = 1000
-        addLog('info', `Connected to session ${sessionId}`)
+        if (!connectedOnce.current) {
+          connectedOnce.current = true
+          addLog('info', `Connected to session ${sessionId}`)
+        }
 
         client.subscribe(`/topic/session/${sessionId}`, (msg) => {
           try {
@@ -120,7 +130,6 @@ export function useWebSocket(
       },
       onDisconnect: () => {
         setIsConnected(false)
-        addLog('warning', 'WebSocket disconnected — reconnecting...')
         scheduleReconnect()
       },
       onStompError: () => {

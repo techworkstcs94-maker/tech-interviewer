@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CodeEditor from '../components/CodeEditor'
 import TestResults from '../components/TestResults'
@@ -11,7 +11,7 @@ import { completeSession } from '../api/sessions'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useTimer } from '../hooks/useTimer'
 import { useSnapshots } from '../hooks/useSnapshots'
-import type { Challenge } from '../types'
+import type { Challenge, TestCase } from '../types'
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   EASY: '#22c55e',
@@ -32,9 +32,14 @@ export default function ChallengeArena() {
   const [submitted, setSubmitted] = useState<Set<number>>(new Set())
   const [hintsOpen, setHintsOpen] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [hintRevealed, setHintRevealed] = useState<Record<number, Set<string>>>({})
 
   const activeChallenge = challenges[activeIdx]
   const { instantResults, deepResults, logs, deepStatus, isConnected } = useWebSocket(sessionId, activeChallenge?.id ?? null)
+
+  const testCases = useMemo<TestCase[]>(() => {
+    try { return JSON.parse(activeChallenge?.testCasesJson ?? '[]') } catch { return [] }
+  }, [activeChallenge?.testCasesJson])
   const { save, load } = useSnapshots(sessionId)
   const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600)
 
@@ -80,10 +85,12 @@ export default function ChallengeArena() {
     setSubmitError('')
     try {
       save(activeChallenge.id, codes[activeChallenge.id] ?? '')
+      const hintsUsed = hintRevealed[activeChallenge.id]?.size ?? 0
       await submitCode({
         challengeId: activeChallenge.id,
         code: codes[activeChallenge.id] ?? '',
         elapsedSeconds: timer.elapsed,
+        hintsUsed,
       })
       setSubmitted(prev => new Set([...prev, activeChallenge.id]))
     } catch (e: any) {
@@ -195,8 +202,9 @@ export default function ChallengeArena() {
         {/* Right: Info + Results + Log */}
         <div className="flex flex-col overflow-hidden">
           {/* Top: Challenge info */}
-          <div className="shrink-0 p-4 border-b border-[var(--border)] space-y-3">
-            <div className="flex items-start justify-between gap-2">
+          <div className="shrink-0 border-b border-[var(--border)]">
+            {/* Title row */}
+            <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
               <div>
                 <h2 className="font-bold text-white text-sm">{activeChallenge.title}</h2>
                 <div className="flex items-center gap-2 mt-1">
@@ -211,25 +219,52 @@ export default function ChallengeArena() {
               </div>
               <button
                 onClick={() => setHintsOpen(true)}
-                className="text-[10px] px-2 py-1 rounded border border-[var(--amber)] text-[var(--amber)] hover:bg-amber-900/20 transition-colors"
+                className="text-[10px] px-2 py-1 rounded border border-[var(--amber)] text-[var(--amber)] hover:bg-amber-900/20 transition-colors shrink-0"
               >
                 💡 Hints
               </button>
             </div>
 
-            <p className="text-xs text-[var(--muted)] leading-relaxed max-h-20 overflow-y-auto">
-              {activeChallenge.description}
-            </p>
+            {/* Scrollable: scoring + description */}
+            <div className="px-4 pb-2 max-h-52 overflow-y-auto space-y-3">
+              {/* Scoring criteria */}
+              <div>
+                <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-semibold mb-1.5">
+                  Scoring — 100 pts total
+                </div>
+                <div className="space-y-0.5">
+                  {testCases.map((tc, i) => (
+                    <div key={tc.id} className="flex items-center justify-between gap-2 py-0.5">
+                      <span className="text-[10px] text-[var(--muted)]">{i + 1}. {tc.label}</span>
+                      <span className="text-[10px] font-mono text-[var(--blue)] shrink-0">{tc.weight} pt</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-            <Timer
-              remaining={timer.remaining}
-              elapsed={timer.elapsed}
-              limitSeconds={activeChallenge.timeLimitSeconds}
-              isRunning={timer.isRunning}
-              onStart={timer.start}
-              onPause={timer.pause}
-              onResume={timer.resume}
-            />
+              {/* Description */}
+              <div>
+                <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-semibold mb-1.5">
+                  Description
+                </div>
+                <pre className="text-[11px] text-[var(--muted)] leading-relaxed whitespace-pre-wrap font-sans">
+                  {activeChallenge.description}
+                </pre>
+              </div>
+            </div>
+
+            {/* Timer — always visible */}
+            <div className="px-4 pb-3">
+              <Timer
+                remaining={timer.remaining}
+                elapsed={timer.elapsed}
+                limitSeconds={activeChallenge.timeLimitSeconds}
+                isRunning={timer.isRunning}
+                onStart={timer.start}
+                onPause={timer.pause}
+                onResume={timer.resume}
+              />
+            </div>
           </div>
 
           {/* Middle: Test results */}
@@ -252,6 +287,11 @@ export default function ChallengeArena() {
         hintsJson={activeChallenge.hintsJson}
         open={hintsOpen}
         onClose={() => setHintsOpen(false)}
+        revealed={hintRevealed[activeChallenge.id] ?? new Set()}
+        onReveal={(hintId) => setHintRevealed(prev => ({
+          ...prev,
+          [activeChallenge.id]: new Set([...(prev[activeChallenge.id] ?? []), hintId]),
+        }))}
       />
     </div>
   )

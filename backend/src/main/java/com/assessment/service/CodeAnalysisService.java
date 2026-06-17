@@ -89,11 +89,17 @@ public class CodeAnalysisService {
                 t3 ? "Found @PathVariable" : "Missing @PathVariable in method parameter"));
 
         boolean t4 = cu.findAll(MethodDeclaration.class).stream()
-                .anyMatch(m -> m.getTypeAsString().contains("ResponseEntity")
-                        && (m.toString().contains("notFound") || m.toString().contains("NOT_FOUND")
-                            || m.toString().contains("404")));
-        results.add(tr("t4", "ResponseEntity used for 404", t4,
-                t4 ? "Found 404 handling" : "Missing ResponseEntity.notFound() or NOT_FOUND status"));
+                .anyMatch(m ->
+                        // ResponseEntity.notFound() / NOT_FOUND / 404 in return
+                        (m.getTypeAsString().contains("ResponseEntity")
+                                && (m.toString().contains("notFound") || m.toString().contains("NOT_FOUND")
+                                    || m.toString().contains("404")))
+                        // ResponseStatusException with NOT_FOUND (valid alternative)
+                        || (m.toString().contains("ResponseStatusException")
+                                && (m.toString().contains("NOT_FOUND") || m.toString().contains("404")))
+                );
+        results.add(tr("t4", "404 handling present", t4,
+                t4 ? "Found 404 handling" : "Missing 404 response — use ResponseEntity.notFound() or throw ResponseStatusException(HttpStatus.NOT_FOUND)"));
 
         boolean t5 = cu.findAll(ClassOrInterfaceDeclaration.class).stream()
                 .anyMatch(c -> c.getNameAsString().contains("Product")

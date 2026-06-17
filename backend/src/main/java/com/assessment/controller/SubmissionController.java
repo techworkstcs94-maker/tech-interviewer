@@ -49,8 +49,14 @@ public class SubmissionController {
 
         AnalysisResult result = codeAnalysisService.analyze(request.getChallengeId(), request.getCode());
 
+        int hintsUsed = request.getHintsUsed() != null ? request.getHintsUsed() : 0;
+        int hintPenalty = hintsUsed * 5;
+        int adjustedScore = Math.max(0, result.getInstantScore() - hintPenalty);
+        AnalysisResult adjustedResult = new AnalysisResult(
+                result.getTestResults(), adjustedScore, 0, result.getParseError());
+
         try {
-            submission.setInstantScore(result.getInstantScore());
+            submission.setInstantScore(adjustedScore);
             submission.setInstantResults(objectMapper.writeValueAsString(result.getTestResults()));
             submission.setStatus(Submission.SubmissionStatus.INSTANT_DONE);
             submissionRepository.save(submission);
@@ -58,14 +64,14 @@ public class SubmissionController {
             log.error("Failed to serialize instant results", e);
         }
 
-        webSocketService.sendInstantResult(sessionId, result);
+        webSocketService.sendInstantResult(sessionId, adjustedResult);
         gitHubActionsService.triggerWorkflow(sessionId, request.getChallengeId(), request.getCode());
 
         return ResponseEntity.ok(new SubmissionResponse(
                 submission.getId(),
-                result.getTestResults(),
-                result.getInstantScore(),
-                result.getQualityScore(),
+                adjustedResult.getTestResults(),
+                adjustedScore,
+                0,
                 submission.getStatus().name()
         ));
     }

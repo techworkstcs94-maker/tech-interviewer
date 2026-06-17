@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Legend } from 'recharts'
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
 import { getSessionReport } from '../api/sessions'
 import type { Session, Submission } from '../types'
 
@@ -29,17 +29,20 @@ export default function SessionReport() {
 
   if (!session) return null
 
+  const unifiedScore = (sub: typeof session.submissions[0]) =>
+    sub.deepScore ?? sub.instantScore ?? 0
+
   const radarData = [1, 2, 3, 4, 5, 6].map(id => {
     const sub = session.submissions.find(s => s.challengeId === id)
     return {
       subject: `C${id}`,
-      instant: sub?.instantScore ?? 0,
-      deep: sub?.deepScore ?? 0,
+      score: sub ? unifiedScore(sub) : 0,
     }
   })
 
-  const totalInstant = session.submissions.reduce((s, sub) => s + (sub.instantScore ?? 0), 0)
-  const totalDeep = session.submissions.reduce((s, sub) => s + (sub.deepScore ?? 0), 0)
+  const avgScore = session.submissions.length > 0
+    ? Math.round(session.submissions.reduce((s, sub) => s + unifiedScore(sub), 0) / session.submissions.length)
+    : 0
 
   return (
     <div className="min-h-screen bg-[var(--bg)] p-6">
@@ -59,11 +62,10 @@ export default function SessionReport() {
         </div>
 
         {/* Score summary */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {[
             { label: 'Challenges Attempted', value: session.submissions.length, color: 'var(--blue)' },
-            { label: 'Avg Instant Score', value: `${Math.round(session.averageInstantScore)}/100`, color: 'var(--green)' },
-            { label: 'Avg Deep Score', value: `${Math.round(session.averageDeepScore)}/100`, color: 'var(--amber)' },
+            { label: 'Average Score', value: `${avgScore}/100`, color: 'var(--green)' },
           ].map(item => (
             <div key={item.label} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center">
               <div className="orbitron text-3xl font-black" style={{ color: item.color }}>{item.value}</div>
@@ -79,9 +81,7 @@ export default function SessionReport() {
             <RadarChart data={radarData}>
               <PolarGrid stroke="var(--border)" />
               <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--muted)', fontSize: 12, fontFamily: 'JetBrains Mono' }} />
-              <Radar name="Instant" dataKey="instant" stroke="var(--blue)" fill="var(--blue)" fillOpacity={0.2} />
-              <Radar name="Deep" dataKey="deep" stroke="var(--green)" fill="var(--green)" fillOpacity={0.2} />
-              <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'JetBrains Mono', color: 'var(--muted)' }} />
+              <Radar name="Score" dataKey="score" stroke="var(--green)" fill="var(--green)" fillOpacity={0.25} />
             </RadarChart>
           </ResponsiveContainer>
         </div>
@@ -102,8 +102,15 @@ export default function SessionReport() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-[var(--muted)]">Challenge {sub.challengeId}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-[var(--blue)]">Instant: {sub.instantScore ?? '—'}</span>
-                    <span className="text-xs text-[var(--green)]">Deep: {sub.deepScore ?? '—'}</span>
+                    <span
+                      className="text-xs font-semibold"
+                      style={{ color: unifiedScore(sub) >= 80 ? 'var(--green)' : unifiedScore(sub) >= 50 ? 'var(--amber)' : 'var(--red)' }}
+                    >
+                      {unifiedScore(sub)}/100
+                    </span>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      {sub.deepScore != null ? 'JUnit' : 'AST'}
+                    </span>
                     {sub.elapsedSeconds && (
                       <span className="text-xs text-[var(--muted)]">
                         {Math.floor(sub.elapsedSeconds / 60)}m {sub.elapsedSeconds % 60}s

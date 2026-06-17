@@ -22,6 +22,7 @@ client.interceptors.response.use(
       localStorage.removeItem('token')
       localStorage.removeItem('sessionId')
       localStorage.removeItem('candidateName')
+      window.location.href = '/start'
     }
     return Promise.reject(err)
   }

@@ -7,4 +7,5 @@ public class SubmissionRequest {
     private Long challengeId;
     private String code;
     private Integer elapsedSeconds;
+    private Integer hintsUsed;
 }

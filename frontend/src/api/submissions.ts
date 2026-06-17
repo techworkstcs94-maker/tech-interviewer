@@ -5,6 +5,7 @@ export interface SubmitPayload {
   challengeId: number
   code: string
   elapsedSeconds: number
+  hintsUsed: number
 }
 
 export interface SubmitResponse {

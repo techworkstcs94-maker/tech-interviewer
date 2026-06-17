@@ -38,8 +38,6 @@ public class GitHubActionsService {
     public void triggerWorkflow(String sessionId, Long challengeId, String code) {
         if ("placeholder".equals(owner) || "placeholder".equals(repo) || "placeholder".equals(token)) {
             log.warn("GitHub not configured — skipping deep evaluation for session {}", sessionId);
-            webSocketService.sendError(sessionId,
-                    "GitHub Actions not configured. Deep evaluation skipped. Set GITHUB_OWNER, GITHUB_REPO, and GITHUB_TOKEN env vars.");
             return;
         }
 
