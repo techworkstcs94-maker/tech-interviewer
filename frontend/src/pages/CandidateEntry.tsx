@@ -31,7 +31,8 @@ export default function CandidateEntry() {
       if (stopped) return
       attempts++
       try {
-        const res = await fetch('/api/health', { signal: AbortSignal.timeout(5000) })
+        const base = import.meta.env.VITE_API_URL || ''
+        const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(5000) })
         if (res.ok) {
           localStorage.setItem('backendReady', Date.now().toString())
           setBackendState('ready')
