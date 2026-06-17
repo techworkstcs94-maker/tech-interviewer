@@ -87,7 +87,7 @@ public class GitHubActionsService {
                 } catch (Exception e) {
                     log.error("Error in fallback scheduler for submission {}: {}", submissionId, e.getMessage());
                 }
-            }, 8, TimeUnit.MINUTES);
+            }, 5, TimeUnit.MINUTES);
 
         } catch (Exception e) {
             log.error("Failed to trigger GitHub Actions for session {}: {}", sessionId, e.getMessage());

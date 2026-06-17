@@ -46,7 +46,7 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
           <div className="animate-spin w-6 h-6 border-2 border-[var(--amber)] border-t-transparent rounded-full" />
           <div>
             <p className="text-xs text-[var(--text)] font-medium">Running deep verification</p>
-            <p className="text-[10px] text-[var(--muted)] mt-0.5">GitHub Actions · JUnit tests · ~2–3 min</p>
+            <p className="text-[10px] text-[var(--muted)] mt-0.5">GitHub Actions · JUnit tests · usually 2–3 min</p>
           </div>
         </div>
       ) : !hasAnyResult ? (
