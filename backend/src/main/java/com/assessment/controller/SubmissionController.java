@@ -64,8 +64,7 @@ public class SubmissionController {
             log.error("Failed to serialize instant results", e);
         }
 
-        webSocketService.sendInstantResult(sessionId, adjustedResult);
-        gitHubActionsService.triggerWorkflow(sessionId, request.getChallengeId(), request.getCode());
+        gitHubActionsService.triggerWorkflow(sessionId, request.getChallengeId(), request.getCode(), submission.getId(), adjustedResult);
 
         return ResponseEntity.ok(new SubmissionResponse(
                 submission.getId(),

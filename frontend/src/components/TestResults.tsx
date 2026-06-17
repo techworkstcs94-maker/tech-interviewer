@@ -8,12 +8,16 @@ interface TestResultsProps {
 }
 
 export default function TestResults({ instantResults, deepResults, deepStatus }: TestResultsProps) {
-  const hasResults = instantResults !== null
   const deepSucceeded = deepStatus === 'done' && deepResults !== null
+  const astFallback = instantResults !== null && (deepStatus === 'error' || (deepStatus === 'idle' && instantResults !== null))
 
   const displayScore = deepSucceeded
     ? deepResults!.deepScore
-    : instantResults?.instantScore
+    : astFallback
+      ? instantResults!.instantScore
+      : undefined
+
+  const hasAnyResult = deepSucceeded || astFallback
 
   return (
     <div className="rounded-lg border border-[var(--border)] overflow-hidden">
@@ -26,7 +30,7 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
             <div className="animate-spin w-2.5 h-2.5 border border-[var(--amber)] border-t-transparent rounded-full shrink-0" />
           )}
         </div>
-        {hasResults && displayScore !== undefined && (
+        {hasAnyResult && displayScore !== undefined && (
           <span
             className="text-xs font-bold orbitron"
             style={{ color: displayScore >= 80 ? 'var(--green)' : displayScore >= 50 ? 'var(--amber)' : 'var(--red)' }}
@@ -36,12 +40,21 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
         )}
       </div>
 
-      {!hasResults ? (
+      {deepStatus === 'running' ? (
+        /* WAITING — deep verification in progress, don't show AST */
+        <div className="px-3 py-8 flex flex-col items-center gap-3 text-center">
+          <div className="animate-spin w-6 h-6 border-2 border-[var(--amber)] border-t-transparent rounded-full" />
+          <div>
+            <p className="text-xs text-[var(--text)] font-medium">Running deep verification</p>
+            <p className="text-[10px] text-[var(--muted)] mt-0.5">GitHub Actions · JUnit tests · ~2–3 min</p>
+          </div>
+        </div>
+      ) : !hasAnyResult ? (
         <div className="px-3 py-6 text-[var(--muted)] text-xs text-center">
           Submit code to run tests
         </div>
       ) : deepSucceeded ? (
-        /* DEEP RESULT — GitHub Actions succeeded, show JUnit result only */
+        /* DEEP RESULT — GitHub Actions JUnit result */
         <div className="p-3 space-y-3">
           <div className="w-full bg-[var(--surface)] rounded-full h-1.5">
             <div
@@ -78,11 +91,15 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
           </div>
         </div>
       ) : (
-        /* AST RESULT — showing structural analysis (deep pending, running, or errored) */
+        /* AST FALLBACK — GitHub not configured or deep timed out */
         <div className="p-2 space-y-1">
-          {instantResults.parseError && (
+          <div className="text-[10px] text-[var(--amber)] px-2 py-1 bg-amber-900/20 rounded mb-2">
+            Structural analysis result (deep verification unavailable)
+          </div>
+
+          {instantResults!.parseError && (
             <div className="text-xs text-[var(--red)] px-2 py-1 bg-red-900/20 rounded mb-2">
-              Parse error: {instantResults.parseError}
+              Parse error: {instantResults!.parseError}
             </div>
           )}
 
@@ -90,13 +107,13 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
             <div
               className="h-1.5 rounded-full transition-all duration-500"
               style={{
-                width: `${instantResults.instantScore ?? 0}%`,
-                backgroundColor: (instantResults.instantScore ?? 0) >= 80 ? 'var(--green)' : (instantResults.instantScore ?? 0) >= 50 ? 'var(--amber)' : 'var(--red)',
+                width: `${instantResults!.instantScore ?? 0}%`,
+                backgroundColor: (instantResults!.instantScore ?? 0) >= 80 ? 'var(--green)' : (instantResults!.instantScore ?? 0) >= 50 ? 'var(--amber)' : 'var(--red)',
               }}
             />
           </div>
 
-          {instantResults.testResults.map((t) => (
+          {instantResults!.testResults.map((t) => (
             <div key={t.id} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-[var(--elevated)]">
               <span className={`mt-0.5 shrink-0 ${t.passed ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
                 {t.passed ? '✓' : '✗'}
@@ -111,7 +128,6 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
               </div>
             </div>
           ))}
-
         </div>
       )}
     </div>
