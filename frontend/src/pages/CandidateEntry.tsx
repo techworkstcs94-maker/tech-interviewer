@@ -31,7 +31,7 @@ export default function CandidateEntry() {
       if (stopped) return
       attempts++
       try {
-        const res = await fetch('/api/challenges', { signal: AbortSignal.timeout(5000) })
+        const res = await fetch('/api/health', { signal: AbortSignal.timeout(5000) })
         if (res.ok) {
           localStorage.setItem('backendReady', Date.now().toString())
           setBackendState('ready')

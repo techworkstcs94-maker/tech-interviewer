@@ -35,7 +35,7 @@ export default function Landing() {
     const poll = async () => {
       while (!stopped) {
         try {
-          const res = await fetch('/api/challenges', { signal: AbortSignal.timeout(8000) })
+          const res = await fetch('/api/health', { signal: AbortSignal.timeout(8000) })
           if (res.ok) {
             localStorage.setItem('backendReady', Date.now().toString())
             return
