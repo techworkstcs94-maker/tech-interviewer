@@ -16,10 +16,10 @@ jobs:
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             --max-time 55 \
-            https://javamsainterviewer.onrender.com/api/challenges)
+            ${{ secrets.BACKEND_CALLBACK_URL }}/api/ping)
           echo "Response: ${STATUS}"
           if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 400 ]; then
-            echo "Backend is awake."
+            echo "Backend is awake and database is active."
           else
             echo "Unexpected status ${STATUS} — Render may be restarting."
             exit 1

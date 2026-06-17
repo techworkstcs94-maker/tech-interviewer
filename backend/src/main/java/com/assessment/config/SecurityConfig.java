@@ -33,6 +33,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/health").permitAll()
+                .requestMatchers("/api/ping").permitAll()
                 .requestMatchers("/api/webhook/**").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/submissions/status").permitAll()
