@@ -18,21 +18,33 @@ const SEVERITY_BG: Record<string, string> = {
   critical: 'rgba(255,64,64,0.12)',
 }
 
-function fmtTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })
-  } catch {
-    return iso
+// Jackson without write-dates-as-timestamps=false serialises LocalDateTime as
+// [year, month, day, hour, minute, second, nano]. Handle both forms.
+function toDate(val: unknown): Date | null {
+  if (!val) return null
+  if (Array.isArray(val)) {
+    const [y, mo, d, h = 0, mi = 0, s = 0] = val as number[]
+    return new Date(y, mo - 1, d, h, mi, s)
   }
+  const dt = new Date(val as string)
+  return isNaN(dt.getTime()) ? null : dt
 }
 
-function fmtDuration(startIso: string, endIso?: string) {
-  if (!endIso) return '—'
-  const ms = new Date(endIso).getTime() - new Date(startIso).getTime()
-  if (isNaN(ms) || ms < 0) return '—'
+function fmtTime(val: unknown): string {
+  const dt = toDate(val)
+  if (!dt) return String(val ?? '—')
+  return dt.toLocaleString(undefined, {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+}
+
+function fmtDuration(startVal: unknown, endVal?: unknown): string {
+  const start = toDate(startVal)
+  const end   = toDate(endVal)
+  if (!start || !end) return '—'
+  const ms = end.getTime() - start.getTime()
+  if (ms < 0) return '—'
   const m = Math.floor(ms / 60000)
   const s = Math.floor((ms % 60000) / 1000)
   return `${m}m ${s}s`
@@ -81,9 +93,7 @@ export default function RecruiterSessionDetail() {
   const avgDeep = session.averageDeepScore ?? 0
   const displayScore = Math.round(avgDeep > 0 ? avgDeep : avgInstant)
 
-  const duration = session.startTime
-    ? fmtDuration(session.startTime, session.endTime)
-    : '—'
+  const duration = fmtDuration(session.startTime, session.endTime)
 
   const btnHover = (el: HTMLButtonElement, enter: boolean) => {
     el.style.borderColor = enter ? 'var(--accent)' : 'var(--border)'
