@@ -30,8 +30,13 @@ export default function RecruiterDashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem('recruiterToken')
-    localStorage.removeItem('token')
     navigate('/recruiter')
+  }
+
+  const handleOpenReport = () => {
+    const token = localStorage.getItem('recruiterToken')
+    const base = import.meta.env.VITE_API_URL || ''
+    window.open(`${base}/api/recruiter/report-html?token=${encodeURIComponent(token ?? '')}`, '_blank')
   }
 
   const handleExportCSV = () => {
@@ -163,12 +168,25 @@ export default function RecruiterDashboard() {
             )}
             {sessions.length > 0 && (
               <button
-                onClick={handleExportCSV}
+                onClick={handleOpenReport}
                 style={{
                   background: 'var(--accent-muted)', border: '1px solid rgba(164,230,255,0.3)',
                   borderRadius: '8px', color: 'var(--accent)',
                   padding: '6px 16px', cursor: 'pointer',
                   fontSize: '0.85rem', fontFamily: 'var(--font-ui)', fontWeight: 600,
+                }}
+              >
+                ↓ Solutions PDF
+              </button>
+            )}
+            {sessions.length > 0 && (
+              <button
+                onClick={handleExportCSV}
+                style={{
+                  background: 'none', border: '1px solid var(--border)',
+                  borderRadius: '8px', color: 'var(--text-secondary)',
+                  padding: '6px 16px', cursor: 'pointer',
+                  fontSize: '0.85rem', fontFamily: 'var(--font-ui)',
                 }}
               >
                 ↓ Export CSV

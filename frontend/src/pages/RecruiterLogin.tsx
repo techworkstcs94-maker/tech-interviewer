@@ -16,7 +16,6 @@ export default function RecruiterLogin() {
     try {
       const res = await recruiterLogin(username, password)
       localStorage.setItem('recruiterToken', res.token)
-      localStorage.setItem('token', res.token)
       navigate('/recruiter/dashboard')
     } catch {
       setError('Incorrect credentials. Please try again.')

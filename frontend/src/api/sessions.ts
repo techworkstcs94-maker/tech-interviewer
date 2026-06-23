@@ -1,4 +1,5 @@
 import client from './client'
+import recruiterClient from './recruiterClient'
 import type { LoginResponse, Session, CheatSeverity, CheatEventType } from '../types'
 
 export const startSession = async (name: string, email: string): Promise<LoginResponse> => {
@@ -31,15 +32,15 @@ export const recruiterLogin = async (username: string, password: string) => {
 }
 
 export const getRecruiterSessions = async () => {
-  const res = await client.get('/api/recruiter/sessions')
+  const res = await recruiterClient.get('/api/recruiter/sessions')
   return res.data
 }
 
 export const getRecruiterSessionDetail = async (sessionId: string): Promise<Session> => {
-  const res = await client.get<Session>(`/api/recruiter/sessions/${sessionId}`)
+  const res = await recruiterClient.get<Session>(`/api/recruiter/sessions/${sessionId}`)
   return res.data
 }
 
 export const deleteRecruiterSession = async (sessionId: string): Promise<void> => {
-  await client.delete(`/api/recruiter/sessions/${sessionId}`)
+  await recruiterClient.delete(`/api/recruiter/sessions/${sessionId}`)
 }
