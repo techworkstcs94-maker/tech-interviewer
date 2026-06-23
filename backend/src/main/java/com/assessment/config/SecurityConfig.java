@@ -31,12 +31,20 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Static files served by Spring Boot (React build output)
+                .requestMatchers("/", "/index.html", "/assets/**",
+                        "/*.js", "/*.css", "/*.ico", "/*.png", "/*.svg",
+                        "/*.map", "/*.woff", "/*.woff2", "/*.txt").permitAll()
+                // SPA routes — served by SpaController → index.html
+                .requestMatchers("/start", "/challenge", "/report",
+                        "/recruiter", "/recruiter/**").permitAll()
+                // Public API endpoints
                 .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/health").permitAll()
-                .requestMatchers("/api/ping").permitAll()
+                .requestMatchers("/api/health", "/api/ping").permitAll()
                 .requestMatchers("/api/webhook/**").permitAll()
-                .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/submissions/status").permitAll()
+                .requestMatchers("/ws/**").permitAll()
+                // Protected API endpoints
                 .requestMatchers("/api/recruiter/**").hasRole("RECRUITER")
                 .anyRequest().authenticated()
             )
