@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
 import { getSessionReport } from '../api/sessions'
-import type { Session, Submission } from '../types'
+import type { Session } from '../types'
 
 export default function SessionReport() {
   const navigate = useNavigate()
-  const sessionId = localStorage.getItem('sessionId')
+  const sessionId = localStorage.getItem('completedSessionId')
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
@@ -18,6 +18,12 @@ export default function SessionReport() {
       .catch(() => navigate('/'))
       .finally(() => setLoading(false))
   }, [sessionId, navigate])
+
+  const handleHome = () => {
+    localStorage.removeItem('completedSessionId')
+    localStorage.removeItem('token')
+    navigate('/')
+  }
 
   if (loading) {
     return (
@@ -54,7 +60,7 @@ export default function SessionReport() {
             <p className="text-[var(--muted)] text-sm mt-1">{session.candidateName} · {session.candidateEmail}</p>
           </div>
           <button
-            onClick={() => navigate('/')}
+            onClick={handleHome}
             className="text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors"
           >
             ← Home
@@ -129,6 +135,16 @@ export default function SessionReport() {
               )}
             </div>
           ))}
+        </div>
+
+        {/* Return home */}
+        <div className="text-center pb-8">
+          <button
+            onClick={handleHome}
+            className="px-6 py-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl text-sm text-[var(--muted)] hover:text-[var(--text)] hover:border-[var(--accent)] transition-colors"
+          >
+            Return to Home
+          </button>
         </div>
       </div>
     </div>

@@ -184,3 +184,8 @@ input:focus, textarea:focus, select:focus {
   to   { transform: translateY(0); opacity: 1; }
 }
 .banner-enter { animation: slide-down 0.25s ease-out forwards; }
+
+@keyframes banner-shrink {
+  from { width: 100%; }
+  to   { width: 0%; }
+}

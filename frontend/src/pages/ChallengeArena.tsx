@@ -5,18 +5,20 @@ import TestResults from '../components/TestResults'
 import AnalysisLog from '../components/AnalysisLog'
 import Timer from '../components/Timer'
 import HintsDrawer from '../components/HintsDrawer'
-import { getChallenges, getChallenge } from '../api/challenges'
+import AntiCheatBanner from '../components/AntiCheatBanner'
+import { getChallenges } from '../api/challenges'
 import { submitCode } from '../api/submissions'
-import { completeSession } from '../api/sessions'
+import { completeSession, reportCheatEvent } from '../api/sessions'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useTimer } from '../hooks/useTimer'
 import { useSnapshots } from '../hooks/useSnapshots'
-import type { Challenge, TestCase } from '../types'
+import { AntiCheatMonitor } from '../lib/antiCheat'
+import type { Challenge, TestCase, CheatEventType, CheatSeverity } from '../types'
 
 const DIFFICULTY_COLORS: Record<string, string> = {
-  EASY: '#22c55e',
-  MEDIUM: '#f59e0b',
-  HARD: '#ef4444',
+  EASY: 'var(--success)',
+  MEDIUM: 'var(--warning)',
+  HARD: 'var(--danger)',
 }
 
 export default function ChallengeArena() {
@@ -30,9 +32,14 @@ export default function ChallengeArena() {
   const [lineCount, setLineCount] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState<Set<number>>(new Set())
+  const [submissionCounts, setSubmissionCounts] = useState<Record<number, number>>({})
   const [hintsOpen, setHintsOpen] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [hintRevealed, setHintRevealed] = useState<Record<number, Set<string>>>({})
+  const [warningMessage, setWarningMessage] = useState<string | null>(null)
+  const [flagged, setFlagged] = useState(false)
+
+  const monitorRef = useRef<AntiCheatMonitor | null>(null)
 
   const activeChallenge = challenges[activeIdx]
   const { instantResults, deepResults, logs, deepStatus, isConnected } = useWebSocket(sessionId, activeChallenge?.id ?? null)
@@ -43,7 +50,47 @@ export default function ChallengeArena() {
   const { save, load } = useSnapshots(sessionId)
   const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600)
 
-  // Auto-save every 30s
+  // ── Session guard: block back-navigation while in assessment ────────────
+  useEffect(() => {
+    if (!sessionId) { navigate('/'); return }
+
+    // Push an extra history entry so back-button hits it first
+    window.history.pushState(null, '', window.location.href)
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [sessionId, navigate])
+
+  // ── Anti-cheat monitor ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sessionId) return
+
+    const handleEvent = (type: CheatEventType, severity: CheatSeverity, detail?: string) => {
+      reportCheatEvent(sessionId, type, severity, detail).catch(() => {})
+    }
+    const handleWarning = (message: string) => {
+      setWarningMessage(message)
+    }
+    const handleFlag = () => {
+      setFlagged(true)
+      setWarningMessage('Your session has been flagged due to multiple violations. The recruiter will review this session.')
+    }
+
+    const monitor = new AntiCheatMonitor({
+      sessionId,
+      onEvent: handleEvent,
+      onWarning: handleWarning,
+      onSessionFlag: handleFlag,
+    })
+    monitorRef.current = monitor
+    monitor.start()
+
+    return () => { monitor.finish() }
+  }, [sessionId])
+
+  // ── Auto-save every 30s ─────────────────────────────────────────────────
   useEffect(() => {
     if (!activeChallenge) return
     const t = setInterval(() => {
@@ -53,7 +100,7 @@ export default function ChallengeArena() {
     return () => clearInterval(t)
   }, [activeChallenge, codes, save])
 
-  // Keyboard shortcuts
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'h') { e.preventDefault(); setHintsOpen(o => !o) }
@@ -66,23 +113,24 @@ export default function ChallengeArena() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Load challenges
+  // ── Load challenges ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!sessionId) { navigate('/start'); return }
+    if (!sessionId) return
     getChallenges().then(cs => {
       setChallenges(cs)
       const initial: Record<number, string> = {}
-      cs.forEach(c => {
-        initial[c.id] = load(c.id) ?? c.starterCode ?? ''
-      })
+      cs.forEach(c => { initial[c.id] = load(c.id) ?? c.starterCode ?? '' })
       setCodes(initial)
     })
-  }, [sessionId, navigate, load])
+  }, [sessionId, load])
 
   const handleSubmit = async () => {
     if (!activeChallenge || submitting) return
     setSubmitting(true)
     setSubmitError('')
+    const newCount = (submissionCounts[activeChallenge.id] ?? 0) + 1
+    setSubmissionCounts(prev => ({ ...prev, [activeChallenge.id]: newCount }))
+    monitorRef.current?.logMultipleSubmissions(activeChallenge.id, newCount)
     try {
       save(activeChallenge.id, codes[activeChallenge.id] ?? '')
       const hintsUsed = hintRevealed[activeChallenge.id]?.size ?? 0
@@ -102,9 +150,12 @@ export default function ChallengeArena() {
 
   const handleFinish = async () => {
     if (!sessionId) return
-    try {
-      await completeSession(sessionId)
-    } catch {}
+    monitorRef.current?.finish()
+    try { await completeSession(sessionId) } catch {}
+    // Preserve sessionId for report page (token kept so the report API call works)
+    localStorage.setItem('completedSessionId', sessionId)
+    localStorage.removeItem('sessionId')
+    localStorage.removeItem('candidateName')
     navigate('/report')
   }
 
@@ -121,9 +172,48 @@ export default function ChallengeArena() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--bg)] overflow-hidden">
+
+      {/* Flagged overlay */}
+      {flagged && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 3000,
+          background: 'rgba(10,14,26,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid rgba(255,180,171,0.4)',
+            borderTop: '4px solid var(--danger)',
+            borderRadius: '12px',
+            padding: '40px',
+            maxWidth: '480px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>🚨</div>
+            <h2 style={{ fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: '1.25rem', color: 'var(--danger)', marginBottom: '12px' }}>
+              Session Flagged
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '24px' }}>
+              Multiple integrity violations were detected. Your session has been flagged and will be reviewed by the recruiter. You may still submit your work.
+            </p>
+            <button
+              onClick={() => setFlagged(false)}
+              style={{
+                background: 'var(--danger-muted)', border: '1px solid rgba(255,180,171,0.3)',
+                borderRadius: '8px', color: 'var(--danger)',
+                padding: '10px 24px', cursor: 'pointer',
+                fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: '0.9rem',
+              }}
+            >
+              Continue Assessment
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="h-14 flex items-center px-4 gap-4 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 z-20">
-        {/* Logo */}
         <div className="orbitron text-sm font-bold text-white shrink-0">
           Java<span className="text-[var(--blue)]">MSA</span>
         </div>
@@ -155,6 +245,14 @@ export default function ChallengeArena() {
 
         {/* Session info + finish */}
         <div className="flex items-center gap-3 shrink-0">
+          {flagged && (
+            <span style={{
+              fontSize: '10px', padding: '2px 8px', borderRadius: '10px',
+              background: 'rgba(255,180,171,0.1)', color: 'var(--danger)',
+              border: '1px solid rgba(255,180,171,0.3)',
+              fontFamily: 'var(--font-code)', letterSpacing: '0.04em',
+            }}>⚠ FLAGGED</span>
+          )}
           <span className="text-xs text-[var(--muted)] hidden sm:inline">{candidateName}</span>
           <button
             onClick={handleFinish}
@@ -178,7 +276,6 @@ export default function ChallengeArena() {
               onLineCountChange={setLineCount}
             />
           </div>
-          {/* Bottom bar */}
           <div className="h-10 flex items-center justify-between px-3 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
             <span className="text-[10px] text-[var(--muted)]">
               {lineCount} lines · Ctrl+Enter to run
@@ -201,9 +298,7 @@ export default function ChallengeArena() {
 
         {/* Right: Info + Results + Log */}
         <div className="flex flex-col overflow-hidden">
-          {/* Top: Challenge info */}
           <div className="shrink-0 border-b border-[var(--border)]">
-            {/* Title row */}
             <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
               <div>
                 <h2 className="font-bold text-white text-sm">{activeChallenge.title}</h2>
@@ -225,9 +320,7 @@ export default function ChallengeArena() {
               </button>
             </div>
 
-            {/* Scrollable: scoring + description */}
             <div className="px-4 pb-2 max-h-52 overflow-y-auto space-y-3">
-              {/* Scoring criteria */}
               <div>
                 <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-semibold mb-1.5">
                   Scoring — 100 pts total
@@ -241,8 +334,6 @@ export default function ChallengeArena() {
                   ))}
                 </div>
               </div>
-
-              {/* Description */}
               <div>
                 <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-semibold mb-1.5">
                   Description
@@ -253,7 +344,6 @@ export default function ChallengeArena() {
               </div>
             </div>
 
-            {/* Timer — always visible */}
             <div className="px-4 pb-3">
               <Timer
                 remaining={timer.remaining}
@@ -267,7 +357,6 @@ export default function ChallengeArena() {
             </div>
           </div>
 
-          {/* Middle: Test results */}
           <div className="flex-1 overflow-y-auto p-3">
             <TestResults
               instantResults={instantResults}
@@ -276,7 +365,6 @@ export default function ChallengeArena() {
             />
           </div>
 
-          {/* Bottom: Log */}
           <div className="h-28 shrink-0 border-t border-[var(--border)]">
             <AnalysisLog logs={logs} isConnected={isConnected} />
           </div>
@@ -292,6 +380,11 @@ export default function ChallengeArena() {
           ...prev,
           [activeChallenge.id]: new Set([...(prev[activeChallenge.id] ?? []), hintId]),
         }))}
+      />
+
+      <AntiCheatBanner
+        message={warningMessage}
+        onDismiss={() => setWarningMessage(null)}
       />
     </div>
   )

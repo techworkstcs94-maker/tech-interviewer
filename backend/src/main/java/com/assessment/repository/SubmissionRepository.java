@@ -11,4 +11,5 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     List<Submission> findBySessionId(String sessionId);
     Optional<Submission> findBySessionIdAndChallengeId(String sessionId, Long challengeId);
     List<Submission> findBySessionIdOrderByChallengeIdAsc(String sessionId);
+    void deleteBySessionId(String sessionId);
 }

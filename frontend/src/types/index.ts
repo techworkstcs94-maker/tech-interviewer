@@ -45,6 +45,31 @@ export interface Submission {
   createdAt: string
 }
 
+export type CheatSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type CheatEventType =
+  | 'TAB_SWITCH'
+  | 'WINDOW_BLUR'
+  | 'WINDOW_BLUR_EXTENDED'
+  | 'COPY_DETECTED'
+  | 'PASTE_DETECTED'
+  | 'RIGHT_CLICK'
+  | 'FULLSCREEN_EXIT'
+  | 'DEVTOOLS_OPENED'
+  | 'RAPID_TYPING'
+  | 'SCREENSHOT_ATTEMPT'
+  | 'IDLE_TOO_LONG'
+  | 'MULTIPLE_SUBMISSIONS'
+  | 'SESSION_FLAGGED'
+
+export interface CheatEvent {
+  id?: number
+  sessionId: string
+  eventType: CheatEventType
+  severity: CheatSeverity
+  detail?: string
+  occurredAt: string
+}
+
 export interface Session {
   sessionId: string
   candidateName: string
@@ -55,6 +80,22 @@ export interface Session {
   submissions: Submission[]
   averageInstantScore: number
   averageDeepScore: number
+  cheatEvents?: CheatEvent[]
+  cheatScore?: number
+}
+
+export interface SessionSummary {
+  sessionId: string
+  candidateName: string
+  candidateEmail: string
+  startTime: string
+  endTime: string
+  status: string
+  submissionCount: number
+  avgInstantScore: number
+  avgDeepScore: number
+  cheatScore: number
+  cheatEventCount: number
 }
 
 export interface LoginResponse {

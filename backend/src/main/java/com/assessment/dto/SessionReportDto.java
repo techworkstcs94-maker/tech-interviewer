@@ -1,5 +1,6 @@
 package com.assessment.dto;
 
+import com.assessment.model.CheatEvent;
 import com.assessment.model.Submission;
 import lombok.Data;
 import lombok.AllArgsConstructor;
@@ -20,4 +21,6 @@ public class SessionReportDto {
     private List<Submission> submissions;
     private double averageInstantScore;
     private double averageDeepScore;
+    private List<CheatEvent> cheatEvents;
+    private int cheatScore;
 }

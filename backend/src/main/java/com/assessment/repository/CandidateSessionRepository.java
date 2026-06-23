@@ -8,4 +8,5 @@ import java.util.Optional;
 @Repository
 public interface CandidateSessionRepository extends JpaRepository<CandidateSession, Long> {
     Optional<CandidateSession> findBySessionId(String sessionId);
+    boolean existsBySessionId(String sessionId);
 }
