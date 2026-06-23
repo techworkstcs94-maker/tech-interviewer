@@ -14,9 +14,6 @@ export default function CandidateEntry() {
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const startedAt = useRef(Date.now())
 
-  // Poll /api/challenges until the backend responds 200.
-  // Fast-path: if Landing page already confirmed readiness within the last 2 min,
-  // skip polling entirely — the backend is already awake.
   useEffect(() => {
     const cached = localStorage.getItem('backendReady')
     if (cached && Date.now() - Number(cached) < 120_000) {
@@ -49,7 +46,6 @@ export default function CandidateEntry() {
       } else if (attempts >= 2) {
         setBackendState('waking')
       }
-
       if (!stopped) pollRef.current = setTimeout(ping, 2000)
     }
 
@@ -66,7 +62,6 @@ export default function CandidateEntry() {
     if (backendState !== 'ready') return
     setLoading(true)
     setError('')
-
     try {
       const res = await startSession(name.trim(), email.trim())
       localStorage.setItem('token', res.token)
@@ -80,119 +75,200 @@ export default function CandidateEntry() {
     }
   }
 
-  const backendBadge = () => {
-    switch (backendState) {
-      case 'checking':
-        return (
-          <span className="flex items-center gap-1.5 text-[var(--muted)]">
-            <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full" />
-            Checking backend...
-          </span>
-        )
-      case 'waking':
-        return (
-          <span className="flex items-center gap-1.5 text-[var(--amber)]">
-            <span className="animate-pulse w-2 h-2 rounded-full bg-[var(--amber)]" />
-            Backend waking up — usually takes 20–40s
-          </span>
-        )
-      case 'ready':
-        return (
-          <span className="flex items-center gap-1.5 text-[var(--green)]">
-            <span className="w-2 h-2 rounded-full bg-[var(--green)]" />
-            Backend ready
-          </span>
-        )
-      case 'timeout':
-        return (
-          <span className="flex items-center gap-1.5 text-[var(--red)]">
-            <span className="w-2 h-2 rounded-full bg-[var(--red)]" />
-            Backend unreachable — try refreshing
-          </span>
-        )
-    }
-  }
-
   const canSubmit = backendState === 'ready' && !loading
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 14px',
+    background: 'var(--bg-highest)',
+    border: '1px solid var(--border)',
+    borderRadius: '6px',
+    color: 'var(--text-primary)',
+    fontSize: '0.9rem',
+    fontFamily: 'var(--font-ui)',
+    outline: 'none',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    marginBottom: '6px',
+    fontFamily: 'var(--font-code)',
+    fontSize: '11px',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    color: 'var(--text-muted)',
+  }
+
   return (
-    <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="orbitron text-3xl font-bold text-white mb-2">
-            Java<span className="text-[var(--blue)]">MSA</span> Arena
-          </h1>
-          <p className="text-[var(--muted)] text-sm">Enter your details to start the assessment</p>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Navbar */}
+      <header style={{
+        height: '64px',
+        background: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center',
+        padding: '0 32px', gap: '10px',
+      }}>
+        <div style={{
+          width: 32, height: 32, flexShrink: 0,
+          background: 'var(--accent)', borderRadius: '6px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontWeight: 800, fontSize: '0.8rem', color: 'var(--on-accent)',
+          fontFamily: 'var(--font-ui)',
+        }}>JM</div>
+        <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent)' }}>
+          Java MSA Interviewer
+        </span>
+      </header>
+
+      {/* Centered card */}
+      <main style={{
+        flex: 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '32px',
+      }}>
+        <div style={{ width: '100%', maxWidth: '480px' }}>
+
+          {/* Header */}
+          <div style={{ marginBottom: '32px' }}>
+            <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '10px' }}>
+              Developer Assessment Portal
+            </div>
+            <h1 style={{
+              fontFamily: 'var(--font-ui)', fontWeight: 800,
+              fontSize: '1.75rem', letterSpacing: '-0.02em',
+              color: 'var(--text-primary)', marginBottom: '8px',
+            }}>
+              Start Your Assessment
+            </h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6 }}>
+              Enter your details to begin the Spring Boot Microservices challenge.
+            </p>
+          </div>
+
+          <div className="glass-panel" style={{ borderRadius: '12px', padding: '40px' }}>
+
+            {/* Backend status */}
+            <div style={{ marginBottom: '20px', fontSize: '11px', fontFamily: 'var(--font-code)' }}>
+              {backendState === 'checking' && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1px solid currentColor', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+                  Checking backend...
+                </span>
+              )}
+              {backendState === 'waking' && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--warning)' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                  Backend waking up — usually 20–40s
+                </span>
+              )}
+              {backendState === 'ready' && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                  Backend ready
+                </span>
+              )}
+              {backendState === 'timeout' && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger)' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                  Backend unreachable — try refreshing
+                </span>
+              )}
+            </div>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={labelStyle}>Full Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Jane Smith"
+                  style={inputStyle}
+                  disabled={loading}
+                  autoComplete="name"
+                  required
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="jane@example.com"
+                  style={inputStyle}
+                  disabled={loading}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              {error && (
+                <div style={{
+                  background: 'var(--danger-muted)',
+                  border: '1px solid rgba(255,180,171,0.3)',
+                  borderRadius: '6px', padding: '10px 14px',
+                  color: 'var(--danger)', fontSize: '0.85rem',
+                }}>
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                style={{
+                  width: '100%',
+                  padding: '12px 24px',
+                  background: canSubmit ? 'var(--accent)' : 'var(--bg-highest)',
+                  color: canSubmit ? 'var(--on-accent)' : 'var(--text-muted)',
+                  border: 'none', borderRadius: '8px',
+                  fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '0.95rem',
+                  cursor: canSubmit ? 'pointer' : 'not-allowed',
+                  opacity: loading ? 0.7 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                {loading ? (
+                  <>
+                    <svg style={{ animation: 'spin 1s linear infinite' }} width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" opacity="0.75" />
+                    </svg>
+                    Starting Assessment…
+                  </>
+                ) : backendState !== 'ready' ? 'Waiting for backend...' : 'Begin Assessment →'}
+              </button>
+
+              <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                By starting you agree that this session is monitored for academic integrity.
+              </p>
+            </form>
+
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                style={{
+                  background: 'none', border: 'none',
+                  color: 'var(--text-muted)', fontSize: '0.8rem',
+                  cursor: 'pointer', fontFamily: 'var(--font-ui)',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
+              >
+                ← Back to home
+              </button>
+            </div>
+          </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 space-y-5">
-          {/* Backend status indicator */}
-          <div className="text-[10px] pb-1">{backendBadge()}</div>
-
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1.5">Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="John Doe"
-              className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--muted)] focus:outline-none focus:border-[var(--blue)] transition-colors"
-              disabled={loading}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1.5">Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="john@example.com"
-              className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--muted)] focus:outline-none focus:border-[var(--blue)] transition-colors"
-              disabled={loading}
-            />
-          </div>
-
-          {error && (
-            <p className="text-[var(--red)] text-xs">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full bg-[var(--blue)] hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg py-3 text-sm transition-colors"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                Starting...
-              </span>
-            ) : backendState !== 'ready' ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full opacity-50" />
-                Waiting for backend...
-              </span>
-            ) : 'Start Assessment →'}
-          </button>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors"
-            >
-              ← Back to home
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4 text-xs text-[var(--muted)] space-y-1">
-          <p className="font-semibold text-[var(--text)]">What to expect:</p>
-          <p>• 6 Spring Boot challenges (Easy → Hard)</p>
-          <p>• Instant JavaParser analysis (&lt;1s)</p>
-          <p>• Deep GitHub Actions verification (2-4min)</p>
-          <p>• Live results via WebSocket</p>
-        </div>
-      </div>
+      </main>
     </div>
   )
 }

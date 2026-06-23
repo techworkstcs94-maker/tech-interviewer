@@ -30,118 +30,303 @@ export default function RecruiterDashboard() {
       .finally(() => setLoading(false))
   }, [navigate])
 
+  const handleLogout = () => {
+    localStorage.removeItem('recruiterToken')
+    navigate('/recruiter')
+  }
+
+  const handleRefresh = () => {
+    setLoading(true)
+    getRecruiterSessions().then(setSessions).catch(() => setError('Failed to load sessions')).finally(() => setLoading(false))
+  }
+
   const chartData = sessions.map(s => ({
     name: s.candidateName.split(' ')[0],
     instant: Math.round(s.avgInstantScore),
     deep: Math.round(s.avgDeepScore),
   }))
 
-  const handleLogout = () => {
-    localStorage.removeItem('recruiterToken')
-    navigate('/recruiter')
-  }
+  const avgScore = sessions.length > 0
+    ? Math.round(sessions.reduce((acc, s) => acc + ((s.avgDeepScore || s.avgInstantScore) || 0), 0) / sessions.length)
+    : 0
+
+  const completed = sessions.filter(s => s.status === 'COMPLETED').length
+  const inProgress = sessions.filter(s => s.status !== 'COMPLETED').length
+
+  const stats = [
+    { val: sessions.length, label: 'Total Sessions', sub: 'All submissions', color: 'var(--accent)' },
+    { val: completed,       label: 'Completed',      sub: 'Finished',        color: 'var(--success)' },
+    { val: inProgress,      label: 'In Progress',    sub: 'Active',          color: 'var(--warning)' },
+    { val: `${avgScore}%`,  label: 'Avg Score',      sub: 'Deep score',      color: 'var(--accent-dim)' },
+  ]
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="orbitron text-3xl font-bold text-white">Recruiter Dashboard</h1>
-            <p className="text-[var(--muted)] text-sm mt-1">{sessions.length} candidate sessions</p>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Sticky Navbar ────────────────────────────────────────────────── */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        height: '64px', background: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', padding: '0 32px',
+      }}>
+        <div style={{
+          maxWidth: '1440px', width: '100%', margin: '0 auto',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          {/* Left */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: 32, height: 32, flexShrink: 0,
+                background: 'var(--accent)', borderRadius: '6px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 800, fontSize: '0.8rem', color: 'var(--on-accent)',
+                fontFamily: 'var(--font-ui)',
+              }}>JM</div>
+              <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent)', fontFamily: 'var(--font-ui)' }}>
+                Java MSA Interviewer
+              </span>
+            </div>
+            <span style={{
+              color: 'var(--accent)', fontWeight: 700, fontSize: '0.875rem',
+              borderBottom: '2px solid var(--accent)', paddingBottom: '2px',
+              fontFamily: 'var(--font-ui)',
+            }}>
+              Dashboard
+            </span>
           </div>
-          <div className="flex gap-3">
+
+          {/* Right */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {sessions.length > 0 && (
+              <span style={{
+                background: 'rgba(78,222,163,0.1)',
+                border: '1px solid rgba(78,222,163,0.25)',
+                borderRadius: '6px', padding: '4px 12px',
+                fontSize: '0.8rem', color: 'var(--success)',
+                fontFamily: 'var(--font-code)',
+              }}>
+                avg {avgScore}%
+              </span>
+            )}
             <button
-              onClick={() => { setLoading(true); getRecruiterSessions().then(setSessions).finally(() => setLoading(false)) }}
-              className="px-3 py-1.5 text-xs bg-[var(--elevated)] text-[var(--text)] rounded border border-[var(--border)] hover:border-[var(--blue)] transition-colors"
+              onClick={handleRefresh}
+              style={{
+                background: 'var(--accent-muted)', border: '1px solid rgba(164,230,255,0.3)',
+                borderRadius: '8px', color: 'var(--accent)',
+                padding: '6px 16px', cursor: 'pointer',
+                fontSize: '0.85rem', fontFamily: 'var(--font-ui)', fontWeight: 600,
+              }}
             >
-              Refresh
+              ↻ Refresh
             </button>
             <button
               onClick={handleLogout}
-              className="px-3 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+              style={{
+                background: 'none', border: '1px solid var(--border)',
+                borderRadius: '8px', color: 'var(--text-secondary)',
+                padding: '6px 16px', cursor: 'pointer',
+                fontSize: '0.85rem', fontFamily: 'var(--font-ui)',
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
             >
-              Logout
+              Sign out
             </button>
           </div>
         </div>
+      </header>
+
+      {/* ── Main ─────────────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, padding: '32px', maxWidth: '1440px', width: '100%', margin: '0 auto' }}>
+
+        {/* Page title */}
+        <div style={{ marginBottom: '28px' }}>
+          <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '6px' }}>Recruiter Portal</div>
+          <h1 style={{
+            fontFamily: 'var(--font-ui)', fontWeight: 800,
+            fontSize: '1.75rem', letterSpacing: '-0.02em', color: 'var(--text-primary)',
+          }}>Assessment Dashboard</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
+            {sessions.length} candidate session{sessions.length !== 1 ? 's' : ''} registered
+          </p>
+        </div>
+
+        {error && (
+          <div style={{
+            background: 'var(--danger-muted)', border: '1px solid rgba(255,180,171,0.3)',
+            borderRadius: '8px', padding: '12px 16px',
+            color: 'var(--danger)', marginBottom: '24px', fontSize: '0.875rem',
+          }}>
+            {error}
+          </div>
+        )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin w-8 h-8 border-2 border-[var(--blue)] border-t-transparent rounded-full" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
+            <svg style={{ animation: 'spin 1s linear infinite' }} width="36" height="36" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="var(--accent)" strokeWidth="3" opacity="0.25" />
+              <path fill="var(--accent)" d="M4 12a8 8 0 018-8v8H4z" opacity="0.75" />
+            </svg>
           </div>
-        ) : error ? (
-          <div className="text-[var(--red)] text-center py-10">{error}</div>
         ) : sessions.length === 0 ? (
-          <div className="text-center py-20 text-[var(--muted)]">
-            <div className="text-4xl mb-4">📭</div>
-            <p>No candidate sessions yet.</p>
-            <p className="text-sm mt-1">Share the assessment link to get started.</p>
+          <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📭</div>
+            <p style={{ fontSize: '1rem', fontFamily: 'var(--font-ui)' }}>No candidate sessions yet.</p>
+            <p style={{ fontSize: '0.85rem', marginTop: '6px' }}>Share the assessment link to get started.</p>
           </div>
         ) : (
           <>
-            {/* Bar chart */}
-            {sessions.length > 0 && (
-              <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
-                <h2 className="text-sm font-semibold text-[var(--text)] mb-4">Score Comparison</h2>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={chartData} barGap={4}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} />
-                    <YAxis domain={[0, 100]} tick={{ fill: 'var(--muted)', fontSize: 11 }} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="instant" name="Instant Score" fill="var(--blue)" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="deep" name="Deep Score" fill="var(--green)" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
+            {/* ── Stats cards ──────────────────────────────────────────────── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
+              {stats.map(({ val, label, sub, color }) => (
+                <div key={label} style={{
+                  background: 'var(--bg-raised)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px', padding: '24px',
+                  transition: 'border-color 0.2s', cursor: 'default',
+                }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = color)}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                >
+                  <div className="label-caps" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>{sub}</div>
+                  <div style={{
+                    fontFamily: 'var(--font-ui)', fontSize: '2.25rem', fontWeight: 800,
+                    letterSpacing: '-0.02em', color, marginBottom: '4px',
+                  }}>{val}</div>
+                  <div className="label-caps" style={{ color: 'var(--text-muted)' }}>{label}</div>
+                </div>
+              ))}
+            </div>
 
-            {/* Sessions table */}
-            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+            {/* ── Score chart ───────────────────────────────────────────────── */}
+            <div style={{
+              background: 'var(--bg-raised)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px', padding: '24px',
+              marginBottom: '28px',
+            }}>
+              <div style={{ marginBottom: '16px' }}>
+                <h2 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>Score Comparison</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '2px' }}>Instant vs deep analysis scores per candidate</p>
+              </div>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={chartData} barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-code)' }} />
+                  <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-code)' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8, fontSize: 12,
+                      fontFamily: 'var(--font-ui)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'var(--font-ui)' }} />
+                  <Bar dataKey="instant" name="Instant Score" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="deep" name="Deep Score" fill="var(--success)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* ── Candidates table ──────────────────────────────────────────── */}
+            <section style={{
+              background: 'var(--bg-raised)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px', overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <div>
+                  <h2 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>All Candidates</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '2px', fontFamily: 'var(--font-ui)' }}>
+                    Click a row to view the full session report
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
-                    <tr className="border-b border-[var(--border)] text-left">
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       {['Candidate', 'Email', 'Started', 'Status', 'Submissions', 'Instant', 'Deep'].map(h => (
-                        <th key={h} className="px-4 py-3 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">{h}</th>
+                        <th key={h} style={{
+                          padding: '12px 24px',
+                          textAlign: 'left',
+                          fontFamily: 'var(--font-code)',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap',
+                        }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {sessions.map((s) => (
+                    {sessions.map(s => (
                       <tr
                         key={s.sessionId}
-                        className="border-b border-[var(--border)] hover:bg-[var(--elevated)] cursor-pointer transition-colors"
+                        style={{
+                          borderBottom: '1px solid var(--border)',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-overlay)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                         onClick={() => navigate(`/recruiter/session/${s.sessionId}`)}
                       >
-                        <td className="px-4 py-3 font-medium text-white">{s.candidateName}</td>
-                        <td className="px-4 py-3 text-[var(--muted)]">{s.candidateEmail}</td>
-                        <td className="px-4 py-3 text-[var(--muted)] text-xs">
+                        <td style={{ padding: '14px 24px', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>
+                          {s.candidateName}
+                        </td>
+                        <td style={{ padding: '14px 24px', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                          {s.candidateEmail}
+                        </td>
+                        <td style={{ padding: '14px 24px', color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'var(--font-code)' }}>
                           {s.startTime ? new Date(s.startTime).toLocaleString() : '—'}
                         </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                            s.status === 'COMPLETED' ? 'bg-green-900/40 text-[var(--green)]' : 'bg-blue-900/40 text-[var(--blue)]'
-                          }`}>
+                        <td style={{ padding: '14px 24px' }}>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            textTransform: 'uppercase',
+                            padding: '3px 10px',
+                            borderRadius: '20px',
+                            fontFamily: 'var(--font-code)',
+                            background: s.status === 'COMPLETED' ? 'rgba(78,222,163,0.1)' : 'rgba(164,230,255,0.1)',
+                            color: s.status === 'COMPLETED' ? 'var(--success)' : 'var(--accent)',
+                            border: `1px solid ${s.status === 'COMPLETED' ? 'rgba(78,222,163,0.25)' : 'rgba(164,230,255,0.25)'}`,
+                          }}>
                             {s.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center">{s.submissionCount}</td>
-                        <td className="px-4 py-3 text-[var(--blue)] font-bold orbitron">{Math.round(s.avgInstantScore)}</td>
-                        <td className="px-4 py-3 text-[var(--green)] font-bold orbitron">{Math.round(s.avgDeepScore)}</td>
+                        <td style={{ padding: '14px 24px', textAlign: 'center', color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+                          {s.submissionCount}
+                        </td>
+                        <td style={{ padding: '14px 24px', color: 'var(--accent)', fontWeight: 800, fontFamily: 'var(--font-ui)', fontSize: '1rem' }}>
+                          {Math.round(s.avgInstantScore)}
+                        </td>
+                        <td style={{ padding: '14px 24px', color: 'var(--success)', fontWeight: 800, fontFamily: 'var(--font-ui)', fontSize: '1rem' }}>
+                          {Math.round(s.avgDeepScore)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </section>
           </>
         )}
-      </div>
+      </main>
     </div>
   )
 }

@@ -1,156 +1,365 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { startSession } from '../api/sessions'
 
-const CODE_LINES = [
-  '@RestController',
-  '@RequestMapping("/api")',
-  'public class ProductController {',
-  '  @Autowired private ProductService svc;',
-  '',
-  '  @GetMapping("/products")',
-  '  public List<Product> all() {',
-  '    return svc.findAll();',
-  '  }',
-  '',
-  '  @GetMapping("/products/{id}")',
-  '  public ResponseEntity<Product> byId(@PathVariable Long id) {',
-  '    return svc.findById(id)',
-  '      .map(ResponseEntity::ok)',
-  '      .orElse(ResponseEntity.notFound().build());',
-  '  }',
-  '}',
-]
+type BackendState = 'checking' | 'waking' | 'ready' | 'timeout'
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 14px',
+  background: 'var(--bg-highest)',
+  border: '1px solid var(--border)',
+  borderRadius: '6px',
+  color: 'var(--text-primary)',
+  fontSize: '0.9rem',
+  fontFamily: 'var(--font-ui)',
+  outline: 'none',
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: '6px',
+  fontFamily: 'var(--font-code)',
+  fontSize: '11px',
+  letterSpacing: '0.05em',
+  textTransform: 'uppercase',
+  fontWeight: 700,
+  color: 'var(--text-muted)',
+}
 
 export default function Landing() {
   const navigate = useNavigate()
-  const [displayedLines, setDisplayed] = useState<string[]>([])
-  const [lineIdx, setLineIdx] = useState(0)
-  const [charIdx, setCharIdx] = useState(0)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [backendState, setBackendState] = useState<BackendState>('checking')
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const startedAt = useRef(Date.now())
 
-  // Poll the backend until it responds, then cache readiness in localStorage.
-  // CandidateEntry reads this cache — if the user spent any time on this page
-  // the backend will already be confirmed awake before they hit "Start Assessment".
   useEffect(() => {
-    let stopped = false
-    const poll = async () => {
-      while (!stopped) {
-        try {
-          const base = import.meta.env.VITE_API_URL || ''
-          const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(8000) })
-          if (res.ok) {
-            localStorage.setItem('backendReady', Date.now().toString())
-            return
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 3000))
-      }
+    const cached = localStorage.getItem('backendReady')
+    if (cached && Date.now() - Number(cached) < 120_000) {
+      setBackendState('ready')
+      return
     }
-    poll()
-    return () => { stopped = true }
+
+    let stopped = false
+    let attempts = 0
+
+    const ping = async () => {
+      if (stopped) return
+      attempts++
+      try {
+        const base = import.meta.env.VITE_API_URL || ''
+        const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(8000) })
+        if (res.ok) {
+          localStorage.setItem('backendReady', Date.now().toString())
+          setBackendState('ready')
+          stopped = true
+          return
+        }
+      } catch {}
+
+      if (stopped) return
+      const elapsed = Date.now() - startedAt.current
+      if (elapsed > 90_000) {
+        setBackendState('timeout')
+        stopped = true
+      } else if (attempts >= 2) {
+        setBackendState('waking')
+      }
+      if (!stopped) pollRef.current = setTimeout(ping, 3000)
+    }
+
+    ping()
+    return () => { stopped = true; clearTimeout(pollRef.current!) }
   }, [])
 
-  useEffect(() => {
-    if (lineIdx >= CODE_LINES.length) return
-    const line = CODE_LINES[lineIdx]
-    if (charIdx < line.length) {
-      const t = setTimeout(() => setCharIdx(c => c + 1), 30)
-      return () => clearTimeout(t)
-    } else {
-      const t = setTimeout(() => {
-        setDisplayed(prev => [...prev, line])
-        setLineIdx(l => l + 1)
-        setCharIdx(0)
-      }, 50)
-      return () => clearTimeout(t)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim() || !email.trim()) {
+      setError('Name and email are required')
+      return
     }
-  }, [lineIdx, charIdx])
+    if (backendState !== 'ready') return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await startSession(name.trim(), email.trim())
+      localStorage.setItem('token', res.token)
+      localStorage.setItem('sessionId', res.sessionId)
+      localStorage.setItem('candidateName', res.candidateName)
+      navigate('/challenge')
+    } catch (err: any) {
+      setError(err.response?.data?.message ?? err.message ?? 'Failed to start session')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const currentLine = lineIdx < CODE_LINES.length ? CODE_LINES[lineIdx].slice(0, charIdx) : ''
+  const canSubmit = backendState === 'ready' && !loading
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-5"
-        style={{ backgroundImage: 'linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(90deg, #3b82f6 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+    <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
 
-      <div className="relative z-10 max-w-4xl w-full space-y-12">
-        {/* Header */}
-        <div className="text-center space-y-3">
-          <h1 className="orbitron text-5xl font-black text-white">
-            Java<span className="text-[var(--blue)]">MSA</span>Interviewer
-          </h1>
-          <p className="text-[var(--muted)] text-sm max-w-xl mx-auto">
-            Spring Boot Microservices Assessment Platform · Instant JavaParser analysis + GitHub Actions deep verification
-          </p>
-        </div>
-
-        {/* Typewriter code block */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 font-mono text-sm shadow-2xl shadow-blue-900/20">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-3 h-3 rounded-full bg-[var(--red)]" />
-            <div className="w-3 h-3 rounded-full bg-[var(--amber)]" />
-            <div className="w-3 h-3 rounded-full bg-[var(--green)]" />
-            <span className="ml-2 text-[var(--muted)] text-xs">ProductController.java</span>
+      {/* ── Top Nav ──────────────────────────────────────────────────────── */}
+      <header style={{
+        position: 'fixed', top: 0, width: '100%', zIndex: 50,
+        background: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border)',
+        height: '64px',
+      }}>
+        <div style={{
+          maxWidth: '1440px', margin: '0 auto',
+          padding: '0 32px', height: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: 32, height: 32, flexShrink: 0,
+              background: 'var(--accent)',
+              borderRadius: '6px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 800, fontSize: '0.8rem', color: 'var(--on-accent)',
+              fontFamily: 'var(--font-ui)',
+            }}>JM</div>
+            <span style={{
+              fontFamily: 'var(--font-ui)', fontWeight: 700,
+              fontSize: '1.05rem', color: 'var(--accent)',
+              letterSpacing: '-0.01em',
+            }}>Java MSA Interviewer</span>
           </div>
-          <div className="space-y-0 text-sm leading-6 min-h-[280px]">
-            {displayedLines.map((line, i) => (
-              <div key={i} className="text-[var(--text)] whitespace-pre">
-                {line || <span>&nbsp;</span>}
-              </div>
-            ))}
-            {lineIdx < CODE_LINES.length && (
-              <div className="text-[var(--text)] whitespace-pre">
-                {currentLine}
-                <span className="inline-block w-2 h-4 bg-[var(--blue)] ml-0.5 animate-pulse align-middle" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Action cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <button
-            onClick={() => navigate('/start')}
-            className="group bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--blue)] rounded-xl p-6 text-left transition-all duration-200 hover:shadow-lg hover:shadow-blue-900/20"
-          >
-            <div className="text-3xl mb-3">🚀</div>
-            <h2 className="text-lg font-bold text-white group-hover:text-[var(--blue)] transition-colors mb-2">
-              Start Assessment
-            </h2>
-            <p className="text-sm text-[var(--muted)]">
-              6 challenges · REST, Service Layer, JPA, Exception Handling, WebClient, JWT Security
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {['EASY', 'MEDIUM', 'HARD'].map(d => (
-                <span key={d} className={`text-[10px] px-2 py-0.5 rounded border difficulty-${d.toLowerCase()}`}>{d}</span>
-              ))}
-            </div>
-          </button>
-
           <button
             onClick={() => navigate('/recruiter')}
-            className="group bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--amber)] rounded-xl p-6 text-left transition-all duration-200 hover:shadow-lg hover:shadow-amber-900/20"
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              color: 'var(--text-secondary)',
+              padding: '6px 16px',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontFamily: 'var(--font-ui)',
+              transition: 'border-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
           >
-            <div className="text-3xl mb-3">🎯</div>
-            <h2 className="text-lg font-bold text-white group-hover:text-[var(--amber)] transition-colors mb-2">
-              Recruiter Portal
-            </h2>
-            <p className="text-sm text-[var(--muted)]">
-              View all candidate sessions, scores, and detailed code submissions
-            </p>
-            <div className="mt-4 text-xs text-[var(--muted)]">
-              Secure recruiter dashboard
-            </div>
+            Recruiter Portal
           </button>
         </div>
+      </header>
 
-        {/* Tech badges */}
-        <div className="flex flex-wrap justify-center gap-2 text-[10px] text-[var(--muted)]">
-          {['Spring Boot 3.2', 'Java 17', 'JavaParser AST', 'GitHub Actions', 'React 18', 'Monaco Editor', 'WebSocket', 'PostgreSQL'].map(t => (
-            <span key={t} className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--surface)]">{t}</span>
-          ))}
+      {/* ── Main ─────────────────────────────────────────────────────────── */}
+      <main style={{ paddingTop: '88px', paddingBottom: '48px', flex: 1 }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 32px' }}>
+
+          {/* ── Hero: info card + registration panel ─────────────────────── */}
+          <section style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 420px',
+            gap: '28px',
+          }}>
+            {/* Left: Info card */}
+            <div style={{
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: '12px',
+              background: 'var(--bg-raised)',
+              border: '1px solid var(--border)',
+              padding: '48px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              minHeight: '380px',
+            }}>
+              {/* Subtle radial glow */}
+              <div style={{
+                position: 'absolute', top: -100, right: -100,
+                width: 320, height: 320,
+                background: 'radial-gradient(circle, rgba(164,230,255,0.08) 0%, transparent 70%)',
+                pointerEvents: 'none',
+              }} />
+
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '14px' }}>
+                  Developer Assessment Portal
+                </div>
+                <h1 style={{
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: '2.25rem',
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                  letterSpacing: '-0.02em',
+                  color: 'var(--text-primary)',
+                  marginBottom: '16px',
+                  maxWidth: '520px',
+                }}>
+                  Java Spring Boot<br />
+                  <span style={{ color: 'var(--accent)' }}>Microservices</span><br />
+                  Technical Challenge
+                </h1>
+                <p style={{
+                  color: 'var(--text-secondary)',
+                  fontSize: '1rem',
+                  lineHeight: 1.7,
+                  maxWidth: '480px',
+                  marginBottom: '28px',
+                }}>
+                  A timed, proctored assessment covering REST APIs, Service Layer, JPA,
+                  Exception Handling, WebClient, and JWT Security.
+                  Instant JavaParser analysis with GitHub Actions deep verification.
+                </p>
+
+                {/* Tech badges */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {['Spring Boot 3.2', 'Java 17', 'JavaParser AST', 'JPA / Hibernate', 'JWT Security'].map(tag => (
+                    <span key={tag} style={{
+                      background: 'var(--accent-muted)',
+                      border: '1px solid rgba(164,230,255,0.2)',
+                      borderRadius: '6px',
+                      padding: '4px 12px',
+                      fontSize: '0.8rem',
+                      color: 'var(--accent)',
+                      fontFamily: 'var(--font-code)',
+                    }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Registration glass panel */}
+            <div className="glass-panel" style={{ borderRadius: '12px', padding: '36px' }}>
+              <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '8px' }}>
+                Start Your Assessment
+              </div>
+              <h2 style={{
+                fontFamily: 'var(--font-ui)', fontWeight: 700,
+                fontSize: '1.25rem', color: 'var(--text-primary)',
+                letterSpacing: '-0.01em', marginBottom: '6px',
+              }}>
+                Register &amp; Begin
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
+                Enter your details to start the Spring Boot Microservices assessment.
+              </p>
+
+              {/* Backend status */}
+              <div style={{ marginBottom: '16px', fontSize: '10px', fontFamily: 'var(--font-code)' }}>
+                {backendState === 'checking' && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1px solid currentColor', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+                    Checking backend...
+                  </span>
+                )}
+                {backendState === 'waking' && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--warning)' }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                    Backend waking up — usually 20–40s
+                  </span>
+                )}
+                {backendState === 'ready' && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)' }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                    Backend ready
+                  </span>
+                )}
+                {backendState === 'timeout' && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger)' }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                    Backend unreachable — try refreshing
+                  </span>
+                )}
+              </div>
+
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={labelStyle}>Full Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Jane Smith"
+                    style={inputStyle}
+                    disabled={loading}
+                    autoComplete="name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Email Address</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="jane@example.com"
+                    style={inputStyle}
+                    disabled={loading}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div style={{
+                    background: 'var(--danger-muted)',
+                    border: '1px solid rgba(255,180,171,0.3)',
+                    borderRadius: '6px',
+                    padding: '10px 14px',
+                    color: 'var(--danger)',
+                    fontSize: '0.85rem',
+                  }}>
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  style={{
+                    width: '100%',
+                    padding: '12px 24px',
+                    background: canSubmit ? 'var(--accent)' : 'var(--bg-highest)',
+                    color: canSubmit ? 'var(--on-accent)' : 'var(--text-muted)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontFamily: 'var(--font-ui)',
+                    fontWeight: 700,
+                    fontSize: '0.95rem',
+                    cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    opacity: loading ? 0.7 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => { if (canSubmit) (e.currentTarget as HTMLButtonElement).style.opacity = '0.9'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = loading ? '0.7' : '1'; }}
+                >
+                  {loading ? (
+                    <>
+                      <svg style={{ animation: 'spin 1s linear infinite' }} width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                        <path fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" opacity="0.75" />
+                      </svg>
+                      Starting Assessment…
+                    </>
+                  ) : backendState !== 'ready' ? (
+                    'Waiting for backend...'
+                  ) : 'Begin Assessment →'}
+                </button>
+
+                <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  By starting you agree that this session is monitored for academic integrity.
+                </p>
+              </form>
+            </div>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

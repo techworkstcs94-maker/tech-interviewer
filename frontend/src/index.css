@@ -3,65 +3,184 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0a0e1a;
-  --surface: #0f1628;
-  --elevated: #151f35;
-  --blue: #3b82f6;
-  --green: #22c55e;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --text: #e2e8f0;
-  --muted: #64748b;
-  --border: #1e2d4a;
+  /* ── MD3 Dark Surface Colors ──────────────────────────────────────────── */
+  --bg-base:     #0b1326;
+  --bg-surface:  #171f33;
+  --bg-raised:   #131b2e;
+  --bg-overlay:  #222a3d;
+  --bg-highest:  #2d3449;
+  --bg-bright:   #31394d;
+
+  /* ── Legacy aliases (used by existing components) ─────────────────────── */
+  --bg:       #0b1326;
+  --surface:  #171f33;
+  --elevated: #131b2e;
+
+  /* ── Primary — cyan ───────────────────────────────────────────────────── */
+  --accent:           #a4e6ff;
+  --accent-dim:       #4cd6ff;
+  --accent-container: #00d1ff;
+  --accent-glow:      rgba(164, 230, 255, 0.18);
+  --accent-muted:     rgba(164, 230, 255, 0.10);
+  --on-accent:        #003543;
+
+  /* ── Legacy blue alias (used in ChallengeArena button with text-white) ── */
+  --blue: #0891b2;
+
+  /* ── Secondary — mint ────────────────────────────────────────────────── */
+  --success:           #4edea3;
+  --success-muted:     rgba(78, 222, 163, 0.10);
+  --success-container: #00a572;
+  --on-success:        #003824;
+
+  /* ── Legacy green alias ───────────────────────────────────────────────── */
+  --green: #4edea3;
+
+  /* ── Tertiary — warm amber ───────────────────────────────────────────── */
+  --warning:           #ffd59c;
+  --warning-dim:       #ffba49;
+  --warning-container: #feb127;
+  --warning-muted:     rgba(255, 213, 156, 0.10);
+
+  /* ── Legacy amber alias ───────────────────────────────────────────────── */
+  --amber: #ffd59c;
+
+  /* ── Error ───────────────────────────────────────────────────────────── */
+  --danger:            #ffb4ab;
+  --danger-muted:      rgba(255, 180, 171, 0.10);
+  --danger-container:  #93000a;
+
+  /* ── Legacy red alias ─────────────────────────────────────────────────── */
+  --red: #ffb4ab;
+
+  /* ── Text ────────────────────────────────────────────────────────────── */
+  --text-primary:   #dae2fd;
+  --text-secondary: #bbc9cf;
+  --text-muted:     #859399;
+
+  /* ── Legacy text aliases ──────────────────────────────────────────────── */
+  --text:  #dae2fd;
+  --muted: #859399;
+
+  /* ── Borders ─────────────────────────────────────────────────────────── */
+  --border:       #3c494e;
+  --border-focus: #a4e6ff;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --font-ui:   'Geist', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-code: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+/* ── Reset ──────────────────────────────────────────────────────────────── */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-body {
-  background-color: var(--bg);
-  color: var(--text);
-  font-family: 'JetBrains Mono', monospace;
+html, body {
+  height: 100%;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Focus ──────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--surface);
+/* ── Links ──────────────────────────────────────────────────────────────── */
+a { color: inherit; text-decoration: none; }
+
+/* ── Glass panel ────────────────────────────────────────────────────────── */
+.glass-panel {
+  background: rgba(19, 27, 46, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(60, 73, 78, 0.5);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
+/* ── Label caps ─────────────────────────────────────────────────────────── */
+.label-caps {
+  font-family: var(--font-code);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
+/* ── Form inputs ────────────────────────────────────────────────────────── */
+input, textarea, select {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-ui);
 }
 
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ── Legacy Orbitron utility ─────────────────────────────────────────────── */
 .orbitron {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-ui);
+  font-weight: 800;
 }
 
+/* ── Difficulty labels ──────────────────────────────────────────────────── */
 .difficulty-easy {
-  color: var(--green);
-  border-color: var(--green);
+  color: var(--success);
+  border-color: var(--success);
 }
-
 .difficulty-medium {
-  color: var(--amber);
-  border-color: var(--amber);
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.difficulty-hard {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
-.difficulty-hard {
-  color: var(--red);
-  border-color: var(--red);
+/* ── Tier card borders ──────────────────────────────────────────────────── */
+.card-beginner     { border-left: 3px solid var(--success); }
+.card-intermediate { border-left: 3px solid var(--warning); }
+.card-experienced  { border-left: 3px solid var(--danger); }
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px var(--accent-glow); }
+  50%       { box-shadow: 0 0 24px rgba(164,230,255,0.4), 0 0 40px var(--accent-glow); }
+}
+.btn-running { animation: pulse-glow 1.2s ease-in-out infinite; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fade-in 0.3s ease-out forwards; }
+
+@keyframes slide-down {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.banner-enter { animation: slide-down 0.25s ease-out forwards; }
