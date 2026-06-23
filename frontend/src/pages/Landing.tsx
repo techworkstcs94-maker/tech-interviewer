@@ -131,24 +131,6 @@ export default function Landing() {
               letterSpacing: '-0.01em',
             }}>Java MSA Interviewer</span>
           </div>
-          <button
-            onClick={() => navigate('/recruiter')}
-            style={{
-              background: 'none',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--text-secondary)',
-              padding: '6px 16px',
-              cursor: 'pointer',
-              fontSize: '0.85rem',
-              fontFamily: 'var(--font-ui)',
-              transition: 'border-color 0.15s, color 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
-          >
-            Recruiter Portal
-          </button>
         </div>
       </header>
 
