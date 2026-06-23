@@ -20,6 +20,8 @@ recruiterClient.interceptors.response.use(
     if (err.response?.status === 401 || err.response?.status === 403) {
       localStorage.removeItem('recruiterToken')
       window.location.href = '/recruiter'
+      // Mark as auth error so callers know not to display a generic error message
+      err._isAuthRedirect = true
     }
     return Promise.reject(err)
   }

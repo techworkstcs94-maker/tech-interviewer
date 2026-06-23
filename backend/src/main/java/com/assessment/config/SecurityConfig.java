@@ -44,7 +44,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/webhook/**").permitAll()
                 .requestMatchers("/api/submissions/status").permitAll()
                 .requestMatchers("/ws/**").permitAll()
-                // Protected API endpoints
+                // Protected API endpoints — report-html uses query-param JWT so must be public here
+                .requestMatchers("/api/recruiter/report-html").permitAll()
                 .requestMatchers("/api/recruiter/**").hasRole("RECRUITER")
                 .anyRequest().authenticated()
             )

@@ -22,9 +22,15 @@ export default function RecruiterDashboard() {
 
   const load = () => {
     setLoading(true)
+    setError('')
     getRecruiterSessions()
       .then(setSessions)
-      .catch(() => setError('Failed to load sessions'))
+      .catch((err) => {
+        // 401/403 handled by recruiterClient interceptor (redirects to login) — don't show error
+        if (!err?._isAuthRedirect) {
+          setError('Failed to load sessions. The server may be starting up — please try refreshing in a moment.')
+        }
+      })
       .finally(() => setLoading(false))
   }
 
@@ -60,12 +66,15 @@ export default function RecruiterDashboard() {
 
   const handleDelete = async (sessionId: string, name: string) => {
     if (!confirm(`Delete session for ${name}? This cannot be undone.`)) return
+    setError('')
     setDeletingId(sessionId)
     try {
       await deleteRecruiterSession(sessionId)
       setSessions(prev => prev.filter(s => s.sessionId !== sessionId))
-    } catch {
-      setError('Failed to delete session.')
+    } catch (err: unknown) {
+      if (!(err as { _isAuthRedirect?: boolean })?._isAuthRedirect) {
+        setError('Failed to delete session.')
+      }
     } finally {
       setDeletingId(null)
     }
