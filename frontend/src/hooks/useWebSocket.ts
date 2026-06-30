@@ -51,7 +51,7 @@ export function useWebSocket(
         }
         setDeepResults(result)
         setDeepStatus('done')
-        addLog('success', `Deep result: ${result.deepScore}/100 (${result.passedCount}/${result.totalCount} tests)`)
+        addLog('success', `JUnit result: ${result.passedCount}/${result.totalCount} tests passed · ${result.deepScore}/100`)
       }
     } catch {
       // Network error — will retry on next poll tick
@@ -65,23 +65,29 @@ export function useWebSocket(
         setInstantResults(result)
         const passed = result.testResults?.filter((t) => t.passed).length ?? 0
         const total = result.testResults?.length ?? 0
-        addLog('success', `Instant analysis: ${passed}/${total} tests passed — Score: ${result.instantScore}`)
+        addLog('success', `Structural analysis: ${passed}/${total} checks passed · ${result.instantScore}/100`)
+        // If this arrives while deep is still running, GitHub Actions is not configured
+        // → fall through to AST fallback so the spinner doesn't run forever
+        if (deepStatusRef.current === 'running') {
+          setDeepStatus('error')
+          addLog('warning', 'GitHub Actions not configured — showing structural analysis only')
+        }
         break
       }
       case 'DEEP_STARTED':
         setDeepStatus('running')
-        addLog('info', 'Deep verification started via GitHub Actions...')
+        addLog('info', 'Deep verification started · GitHub Actions is running JUnit tests...')
         break
       case 'DEEP_RESULT': {
         const result = msg.payload as DeepResult
         setDeepResults(result)
         setDeepStatus('done')
-        addLog('success', `Deep verification complete — Score: ${result.deepScore}/100 (${result.passedCount}/${result.totalCount} tests)`)
+        addLog('success', `JUnit complete · ${result.passedCount}/${result.totalCount} tests passed · Score: ${result.deepScore}/100`)
         break
       }
       case 'ERROR':
         setDeepStatus('error')
-        addLog('error', `Error: ${msg.payload}`)
+        addLog('error', `Verification error: ${msg.payload}`)
         break
     }
   }, [addLog])
@@ -150,13 +156,26 @@ export function useWebSocket(
     }
   }, [sessionId, connect])
 
-  // Polling fallback: every 8s while deep eval is running, check the DB
+  // Polling fallback: every 4s while deep eval is running, check the DB
   // Catches the case where DEEP_STARTED was received but DEEP_RESULT was missed
   useEffect(() => {
     if (deepStatus !== 'running') return
-    const interval = setInterval(fetchDeepStatus, 8000)
+    const interval = setInterval(fetchDeepStatus, 4000)
     return () => clearInterval(interval)
   }, [deepStatus, fetchDeepStatus])
+
+  // Safety net: if deep verification is still running after 5 minutes, fall back to
+  // instant results. GitHub Actions typically finishes within 3–4 min.
+  useEffect(() => {
+    if (deepStatus !== 'running') return
+    const timeout = setTimeout(() => {
+      if (deepStatusRef.current === 'running') {
+        setDeepStatus('error')
+        addLog('warning', 'Deep verification timed out after 5 min — showing structural analysis')
+      }
+    }, 5 * 60 * 1000)
+    return () => clearTimeout(timeout)
+  }, [deepStatus, addLog])
 
   return { instantResults, deepResults, logs, deepStatus, isConnected }
 }

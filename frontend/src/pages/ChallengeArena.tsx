@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CodeEditor from '../components/CodeEditor'
 import TestResults from '../components/TestResults'
-import AnalysisLog from '../components/AnalysisLog'
 import Timer from '../components/Timer'
 import HintsDrawer from '../components/HintsDrawer'
 import AntiCheatBanner from '../components/AntiCheatBanner'
@@ -32,6 +31,7 @@ export default function ChallengeArena() {
   const [lineCount, setLineCount] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState<Set<number>>(new Set())
+  const [timedOut, setTimedOut] = useState<Set<number>>(new Set())
   const [submissionCounts, setSubmissionCounts] = useState<Record<number, number>>({})
   const [hintsOpen, setHintsOpen] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -42,19 +42,37 @@ export default function ChallengeArena() {
   const monitorRef = useRef<AntiCheatMonitor | null>(null)
 
   const activeChallenge = challenges[activeIdx]
-  const { instantResults, deepResults, logs, deepStatus, isConnected } = useWebSocket(sessionId, activeChallenge?.id ?? null)
+  const { instantResults, deepResults, deepStatus } = useWebSocket(sessionId, activeChallenge?.id ?? null)
 
   const testCases = useMemo<TestCase[]>(() => {
     try { return JSON.parse(activeChallenge?.testCasesJson ?? '[]') } catch { return [] }
   }, [activeChallenge?.testCasesJson])
   const { save, load } = useSnapshots(sessionId)
-  const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600)
+
+  // Capture activeChallenge in a ref so the timer expiry callback always sees latest value
+  const activeChallengeRef = useRef(activeChallenge)
+  useEffect(() => { activeChallengeRef.current = activeChallenge }, [activeChallenge])
+
+  const handleTimerExpire = useCallback(() => {
+    const challenge = activeChallengeRef.current
+    if (!challenge) return
+    setTimedOut(prev => new Set([...prev, challenge.id]))
+    setWarningMessage(`Time's up for "${challenge.title}" — this challenge has been marked as failed.`)
+  }, [])
+
+  const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600, handleTimerExpire)
+
+  // Auto-start timer when challenges first load and whenever the active challenge changes
+  const timerStart = timer.start
+  useEffect(() => {
+    if (challenges.length === 0) return
+    timerStart()
+  }, [activeIdx, challenges.length, timerStart])
 
   // ── Session guard: block back-navigation while in assessment ────────────
   useEffect(() => {
     if (!sessionId) { navigate('/'); return }
 
-    // Push an extra history entry so back-button hits it first
     window.history.pushState(null, '', window.location.href)
     const handlePopState = () => {
       window.history.pushState(null, '', window.location.href)
@@ -152,7 +170,6 @@ export default function ChallengeArena() {
     if (!sessionId) return
     monitorRef.current?.finish()
     try { await completeSession(sessionId) } catch {}
-    // Preserve sessionId for report page (token kept so the report API call works)
     localStorage.setItem('completedSessionId', sessionId)
     localStorage.removeItem('sessionId')
     localStorage.removeItem('candidateName')
@@ -239,6 +256,9 @@ export default function ChallengeArena() {
                 {c.difficulty[0]}
               </span>
               {submitted.has(c.id) && <span className="text-[var(--green)]">✓</span>}
+              {timedOut.has(c.id) && !submitted.has(c.id) && (
+                <span className="text-[var(--red)]" title="Timed out">✗</span>
+              )}
             </button>
           ))}
         </div>
@@ -296,7 +316,7 @@ export default function ChallengeArena() {
           </div>
         </div>
 
-        {/* Right: Info + Results + Log */}
+        {/* Right: Info + Results */}
         <div className="flex flex-col overflow-hidden">
           <div className="shrink-0 border-b border-[var(--border)]">
             <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
@@ -310,6 +330,11 @@ export default function ChallengeArena() {
                     {activeChallenge.difficulty}
                   </span>
                   <span className="text-[10px] text-[var(--muted)]">{activeChallenge.category}</span>
+                  {timedOut.has(activeChallenge.id) && !submitted.has(activeChallenge.id) && (
+                    <span className="text-[10px] text-[var(--red)] bg-red-900/15 border border-red-800/25 px-1.5 py-0.5 rounded">
+                      Timed out
+                    </span>
+                  )}
                 </div>
               </div>
               <button
@@ -347,26 +372,18 @@ export default function ChallengeArena() {
             <div className="px-4 pb-3">
               <Timer
                 remaining={timer.remaining}
-                elapsed={timer.elapsed}
                 limitSeconds={activeChallenge.timeLimitSeconds}
-                isRunning={timer.isRunning}
-                onStart={timer.start}
-                onPause={timer.pause}
-                onResume={timer.resume}
               />
             </div>
           </div>
 
+          {/* Test Results — takes all remaining height */}
           <div className="flex-1 overflow-y-auto p-3">
             <TestResults
               instantResults={instantResults}
               deepResults={deepResults}
               deepStatus={deepStatus}
             />
-          </div>
-
-          <div className="h-28 shrink-0 border-t border-[var(--border)]">
-            <AnalysisLog logs={logs} isConnected={isConnected} />
           </div>
         </div>
       </div>
