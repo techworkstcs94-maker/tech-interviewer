@@ -30,6 +30,7 @@ export default function ChallengeArena() {
   const [codes, setCodes] = useState<Record<number, string>>({})
   const [lineCount, setLineCount] = useState(1)
   const [submitting, setSubmitting] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const [submitted, setSubmitted] = useState<Set<number>>(new Set())
   const [passed, setPassed] = useState<Set<number>>(new Set())
   const [timedOut, setTimedOut] = useState<Set<number>>(new Set())
@@ -44,14 +45,17 @@ export default function ChallengeArena() {
   const autoAdvancedChallenges = useRef<Set<number>>(new Set())
 
   const activeChallenge = challenges[activeIdx]
-  const { instantResults, deepResults, deepStatus } = useWebSocket(sessionId, activeChallenge?.id ?? null)
+  const { instantResults, deepResults, deepStatus, resetForNewSubmission } = useWebSocket(sessionId, activeChallenge?.id ?? null)
 
-  // Mark challenge as passed when all structural checks pass
+  // Mark challenge as passed from structural checks — but only when no deep JUnit
+  // verification was ever attempted for this submission. If deepStatus is 'running'
+  // or 'error', this instantResults is just a fallback/preview, not a real pass —
+  // the deep-result effect below is the source of truth for those challenges.
   useEffect(() => {
-    if (!activeChallenge || !instantResults) return
+    if (!activeChallenge || !instantResults || deepStatus !== 'idle') return
     const allPassed = instantResults.testResults.length > 0 && instantResults.testResults.every(t => t.passed)
     if (allPassed) setPassed(prev => new Set([...prev, activeChallenge.id]))
-  }, [instantResults, activeChallenge])
+  }, [instantResults, activeChallenge, deepStatus])
 
   // Mark challenge as passed when all JUnit tests pass
   useEffect(() => {
@@ -59,6 +63,19 @@ export default function ChallengeArena() {
     const allPassed = deepResults.totalCount > 0 && deepResults.passedCount === deepResults.totalCount
     if (allPassed) setPassed(prev => new Set([...prev, activeChallenge.id]))
   }, [deepResults, activeChallenge])
+
+  // Clear the "verifying" lock once we have a final outcome for this submission —
+  // a real JUnit done/error, or (when no deep run was ever attempted) the instant result.
+  useEffect(() => {
+    if (deepStatus === 'done' || deepStatus === 'error') {
+      setVerifying(false)
+    } else if (deepStatus === 'idle' && instantResults) {
+      setVerifying(false)
+    }
+  }, [deepStatus, instantResults])
+
+  // Reset the verifying lock whenever the active challenge changes
+  useEffect(() => { setVerifying(false) }, [activeChallenge?.id])
 
   // Auto-advance to next challenge 1.5 s after passing (each challenge advances only once)
   useEffect(() => {
@@ -170,8 +187,10 @@ export default function ChallengeArena() {
   }, [sessionId, load])
 
   const handleSubmit = async () => {
-    if (!activeChallenge || submitting || passed.has(activeChallenge.id)) return
+    if (!activeChallenge || submitting || verifying || passed.has(activeChallenge.id)) return
+    resetForNewSubmission()
     setSubmitting(true)
+    setVerifying(true)
     setSubmitError('')
     const newCount = (submissionCounts[activeChallenge.id] ?? 0) + 1
     setSubmissionCounts(prev => ({ ...prev, [activeChallenge.id]: newCount }))
@@ -187,6 +206,7 @@ export default function ChallengeArena() {
       })
       setSubmitted(prev => new Set([...prev, activeChallenge.id]))
     } catch (e: any) {
+      setVerifying(false)
       setSubmitError(e?.response?.data?.message ?? 'Submission failed')
     } finally {
       setSubmitting(false)
@@ -349,10 +369,10 @@ export default function ChallengeArena() {
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={submitting || deepStatus === 'running'}
+                disabled={submitting || verifying}
                 className="flex items-center gap-1.5 px-3 py-1 text-xs bg-[var(--blue)] hover:bg-blue-500 disabled:opacity-50 text-white rounded transition-colors"
               >
-                {submitting || deepStatus === 'running' ? (
+                {submitting || verifying ? (
                   <span className="animate-spin w-3 h-3 border border-white border-t-transparent rounded-full" />
                 ) : '▶'}
                 Run Tests

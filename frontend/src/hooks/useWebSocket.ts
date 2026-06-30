@@ -9,6 +9,7 @@ interface UseWebSocketReturn {
   logs: LogEntry[]
   deepStatus: 'idle' | 'running' | 'done' | 'error'
   isConnected: boolean
+  resetForNewSubmission: () => void
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || ''
@@ -30,12 +31,20 @@ export function useWebSocket(
   const challengeIdRef = useRef(challengeId)
   useEffect(() => { challengeIdRef.current = challengeId }, [challengeId])
 
-  // Reset per-challenge state whenever the active challenge changes
-  useEffect(() => {
+  // Reset per-challenge state synchronously during render (not in a useEffect) when the
+  // active challenge changes. An effect-based reset runs in the same flush as consumers'
+  // own effects, which can read the new challengeId alongside the still-stale results from
+  // the previous challenge — e.g. falsely marking the next challenge "passed" off the prior
+  // challenge's leftover results during auto-advance. This "adjust state while rendering"
+  // pattern (https://react.dev/learn/you-might-not-need-an-effect) forces React to discard
+  // and re-render before anything else observes the stale combination.
+  const prevChallengeIdRef = useRef(challengeId)
+  if (prevChallengeIdRef.current !== challengeId) {
+    prevChallengeIdRef.current = challengeId
     setInstantResults(null)
     setDeepResults(null)
     setDeepStatus('idle')
-  }, [challengeId])
+  }
 
   // Keep ref in sync so callbacks always see current deepStatus
   useEffect(() => { deepStatusRef.current = deepStatus }, [deepStatus])
@@ -44,13 +53,20 @@ export function useWebSocket(
     setLogs((prev) => [...prev.slice(-99), { time: new Date().toLocaleTimeString(), type, message }])
   }, [])
 
-  // Fetch submission status from DB — used on reconnect and as polling fallback
+  // Fetch submission status from DB — used on reconnect and as polling fallback.
+  // Reads challengeId from the ref (not as a dependency) so this callback's identity stays
+  // stable across challenge switches — otherwise `connect` below gets rebuilt every time the
+  // active challenge changes, forcing a full WebSocket reconnect on every tab switch.
   const fetchDeepStatus = useCallback(async () => {
-    if (!sessionId || !challengeId || deepStatusRef.current === 'done') return
+    const cid = challengeIdRef.current
+    if (!sessionId || !cid || deepStatusRef.current === 'done') return
     try {
-      const resp = await fetch(`${apiUrl}/api/submissions/status?sessionId=${sessionId}&challengeId=${challengeId}`)
+      const resp = await fetch(`${apiUrl}/api/submissions/status?sessionId=${sessionId}&challengeId=${cid}`)
       if (!resp.ok) return
       const data = await resp.json()
+      // Discard the response if the user has since switched away from this challenge —
+      // otherwise a late-arriving fetch can resurrect another challenge's stale result.
+      if (challengeIdRef.current !== cid) return
       if (data.status === 'DEEP_DONE') {
         const result: DeepResult = {
           deepScore: data.deepScore ?? 0,
@@ -65,7 +81,16 @@ export function useWebSocket(
     } catch {
       // Network error — will retry on next poll tick
     }
-  }, [sessionId, challengeId, addLog])
+  }, [sessionId, addLog])
+
+  // Clear any leftover instant/deep state from a previous attempt at the *same* challenge.
+  // Call this right before submitting a new attempt so stale pass/fail data from an earlier
+  // try can't be misread as belonging to the new submission.
+  const resetForNewSubmission = useCallback(() => {
+    setInstantResults(null)
+    setDeepResults(null)
+    setDeepStatus('idle')
+  }, [])
 
   const handleMessage = useCallback((msg: WebSocketMsg, activeChallengeId: number | null) => {
     // Ignore messages meant for a different challenge
@@ -191,5 +216,5 @@ export function useWebSocket(
     return () => clearTimeout(timeout)
   }, [deepStatus, addLog])
 
-  return { instantResults, deepResults, logs, deepStatus, isConnected }
+  return { instantResults, deepResults, logs, deepStatus, isConnected, resetForNewSubmission }
 }

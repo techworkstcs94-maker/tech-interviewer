@@ -40,8 +40,10 @@ public class WebhookController {
         log.info("GitHub webhook received: session={} challenge={} score={}",
                 payload.getSessionId(), payload.getChallengeId(), payload.getDeepScore());
 
+        // Resolve to the most recent submission for this challenge — candidates can resubmit
+        // before passing, which creates multiple rows per (sessionId, challengeId).
         Optional<Submission> submissionOpt = submissionRepository
-                .findBySessionIdAndChallengeId(payload.getSessionId(), payload.getChallengeId());
+                .findFirstBySessionIdAndChallengeIdOrderByIdDesc(payload.getSessionId(), payload.getChallengeId());
 
         if (submissionOpt.isEmpty()) {
             log.warn("No submission for session={} challenge={}", payload.getSessionId(), payload.getChallengeId());

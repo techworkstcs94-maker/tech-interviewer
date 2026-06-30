@@ -80,7 +80,7 @@ public class SubmissionController {
             @RequestParam String sessionId,
             @RequestParam Long challengeId) {
 
-        return submissionRepository.findBySessionIdAndChallengeId(sessionId, challengeId)
+        return submissionRepository.findFirstBySessionIdAndChallengeIdOrderByIdDesc(sessionId, challengeId)
                 .map(sub -> {
                     Map<String, Object> response = new HashMap<>();
                     response.put("status", sub.getStatus().name());
