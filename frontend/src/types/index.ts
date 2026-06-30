@@ -108,6 +108,7 @@ export interface WebSocketMsg {
   type: 'INSTANT_RESULT' | 'DEEP_STARTED' | 'DEEP_RESULT' | 'ERROR'
   payload: unknown
   timestamp: number
+  challengeId?: number | null
 }
 
 export interface LogEntry {

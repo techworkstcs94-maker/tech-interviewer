@@ -27,6 +27,15 @@ export function useWebSocket(
   const retryDelay = useRef(1000)
   const deepStatusRef = useRef<'idle' | 'running' | 'done' | 'error'>('idle')
   const connectedOnce = useRef(false)
+  const challengeIdRef = useRef(challengeId)
+  useEffect(() => { challengeIdRef.current = challengeId }, [challengeId])
+
+  // Reset per-challenge state whenever the active challenge changes
+  useEffect(() => {
+    setInstantResults(null)
+    setDeepResults(null)
+    setDeepStatus('idle')
+  }, [challengeId])
 
   // Keep ref in sync so callbacks always see current deepStatus
   useEffect(() => { deepStatusRef.current = deepStatus }, [deepStatus])
@@ -58,7 +67,12 @@ export function useWebSocket(
     }
   }, [sessionId, challengeId, addLog])
 
-  const handleMessage = useCallback((msg: WebSocketMsg) => {
+  const handleMessage = useCallback((msg: WebSocketMsg, activeChallengeId: number | null) => {
+    // Ignore messages meant for a different challenge
+    if (msg.challengeId != null && activeChallengeId != null && msg.challengeId !== activeChallengeId) {
+      return
+    }
+
     switch (msg.type) {
       case 'INSTANT_RESULT': {
         const result = msg.payload as AnalysisResult
@@ -125,7 +139,7 @@ export function useWebSocket(
         client.subscribe(`/topic/session/${sessionId}`, (msg) => {
           try {
             const data: WebSocketMsg = JSON.parse(msg.body)
-            handleMessage(data)
+            handleMessage(data, challengeIdRef.current)
           } catch {
             addLog('error', 'Failed to parse WebSocket message')
           }

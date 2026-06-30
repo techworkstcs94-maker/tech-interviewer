@@ -43,12 +43,22 @@ public class GitHubActionsService {
                 .build();
     }
 
+    // Challenges with JUnit test directories in challenge-tests/challenge-N
+    private static final java.util.Set<Long> JUNIT_ENABLED_CHALLENGES = java.util.Set.of(1L, 2L, 3L, 4L, 5L, 6L);
+
     @Async
     public void triggerWorkflow(String sessionId, Long challengeId, String code,
                                 Long submissionId, AnalysisResult astFallback) {
         if ("placeholder".equals(owner) || "placeholder".equals(repo) || "placeholder".equals(token)) {
             log.warn("GitHub not configured — sending AST result as fallback for session {}", sessionId);
-            webSocketService.sendInstantResult(sessionId, astFallback);
+            webSocketService.sendInstantResult(sessionId, challengeId, astFallback);
+            return;
+        }
+
+        // Only trigger GitHub Actions for challenges that have a test directory
+        if (!JUNIT_ENABLED_CHALLENGES.contains(challengeId)) {
+            log.info("No JUnit test directory for challenge {} — using structural analysis only", challengeId);
+            webSocketService.sendInstantResult(sessionId, challengeId, astFallback);
             return;
         }
 
@@ -73,16 +83,16 @@ public class GitHubActionsService {
                     .toBodilessEntity()
                     .block();
 
-            webSocketService.sendDeepStarted(sessionId);
+            webSocketService.sendDeepStarted(sessionId, challengeId);
             log.info("GitHub Actions triggered for session={}, challenge={}", sessionId, challengeId);
 
-            // If deep result never arrives within 8 minutes, fall back to AST
+            // If deep result never arrives within 5 minutes, fall back to AST
             fallbackScheduler.schedule(() -> {
                 try {
                     Submission sub = submissionRepository.findById(submissionId).orElse(null);
                     if (sub != null && sub.getDeepScore() == null) {
                         log.warn("Deep eval timed out for submission {} — sending AST fallback", submissionId);
-                        webSocketService.sendInstantResult(sessionId, astFallback);
+                        webSocketService.sendInstantResult(sessionId, challengeId, astFallback);
                     }
                 } catch (Exception e) {
                     log.error("Error in fallback scheduler for submission {}: {}", submissionId, e.getMessage());
@@ -91,7 +101,7 @@ public class GitHubActionsService {
 
         } catch (Exception e) {
             log.error("Failed to trigger GitHub Actions for session {}: {}", sessionId, e.getMessage());
-            webSocketService.sendInstantResult(sessionId, astFallback);
+            webSocketService.sendInstantResult(sessionId, challengeId, astFallback);
         }
     }
 }

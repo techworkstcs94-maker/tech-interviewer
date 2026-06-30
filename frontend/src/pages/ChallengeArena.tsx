@@ -31,6 +31,7 @@ export default function ChallengeArena() {
   const [lineCount, setLineCount] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState<Set<number>>(new Set())
+  const [passed, setPassed] = useState<Set<number>>(new Set())
   const [timedOut, setTimedOut] = useState<Set<number>>(new Set())
   const [submissionCounts, setSubmissionCounts] = useState<Record<number, number>>({})
   const [hintsOpen, setHintsOpen] = useState(false)
@@ -40,9 +41,35 @@ export default function ChallengeArena() {
   const [flagged, setFlagged] = useState(false)
 
   const monitorRef = useRef<AntiCheatMonitor | null>(null)
+  const autoAdvancedChallenges = useRef<Set<number>>(new Set())
 
   const activeChallenge = challenges[activeIdx]
   const { instantResults, deepResults, deepStatus } = useWebSocket(sessionId, activeChallenge?.id ?? null)
+
+  // Mark challenge as passed when all structural checks pass
+  useEffect(() => {
+    if (!activeChallenge || !instantResults) return
+    const allPassed = instantResults.testResults.length > 0 && instantResults.testResults.every(t => t.passed)
+    if (allPassed) setPassed(prev => new Set([...prev, activeChallenge.id]))
+  }, [instantResults, activeChallenge])
+
+  // Mark challenge as passed when all JUnit tests pass
+  useEffect(() => {
+    if (!activeChallenge || !deepResults) return
+    const allPassed = deepResults.totalCount > 0 && deepResults.passedCount === deepResults.totalCount
+    if (allPassed) setPassed(prev => new Set([...prev, activeChallenge.id]))
+  }, [deepResults, activeChallenge])
+
+  // Auto-advance to next challenge 1.5 s after passing (each challenge advances only once)
+  useEffect(() => {
+    if (!activeChallenge || !passed.has(activeChallenge.id)) return
+    if (autoAdvancedChallenges.current.has(activeChallenge.id)) return
+    const nextIdx = activeIdx + 1
+    if (nextIdx >= challenges.length) return
+    autoAdvancedChallenges.current.add(activeChallenge.id)
+    const t = setTimeout(() => setActiveIdx(nextIdx), 1500)
+    return () => clearTimeout(t)
+  }, [passed, activeChallenge, activeIdx, challenges.length])
 
   const testCases = useMemo<TestCase[]>(() => {
     try { return JSON.parse(activeChallenge?.testCasesJson ?? '[]') } catch { return [] }
@@ -143,7 +170,7 @@ export default function ChallengeArena() {
   }, [sessionId, load])
 
   const handleSubmit = async () => {
-    if (!activeChallenge || submitting) return
+    if (!activeChallenge || submitting || passed.has(activeChallenge.id)) return
     setSubmitting(true)
     setSubmitError('')
     const newCount = (submissionCounts[activeChallenge.id] ?? 0) + 1
@@ -237,30 +264,41 @@ export default function ChallengeArena() {
 
         {/* Challenge tabs */}
         <div className="flex-1 flex items-center gap-1 overflow-x-auto">
-          {challenges.map((c, i) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveIdx(i)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs whitespace-nowrap transition-colors ${
-                i === activeIdx
-                  ? 'bg-[var(--elevated)] text-white border border-[var(--border)]'
-                  : 'text-[var(--muted)] hover:text-[var(--text)]'
-              }`}
-            >
-              <span className="font-mono">{i + 1}</span>
-              <span className="hidden md:inline">{c.title.split(' ')[0]}</span>
-              <span
-                className="text-[10px] px-1 rounded border"
-                style={{ color: DIFFICULTY_COLORS[c.difficulty], borderColor: DIFFICULTY_COLORS[c.difficulty] }}
+          {challenges.map((c, i) => {
+            const isPassed = passed.has(c.id)
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveIdx(i)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs whitespace-nowrap transition-colors ${
+                  i === activeIdx
+                    ? isPassed
+                      ? 'bg-green-900/30 text-green-300 border border-green-700/50'
+                      : 'bg-[var(--elevated)] text-white border border-[var(--border)]'
+                    : isPassed
+                      ? 'text-green-400/70 hover:text-green-300'
+                      : 'text-[var(--muted)] hover:text-[var(--text)]'
+                }`}
               >
-                {c.difficulty[0]}
-              </span>
-              {submitted.has(c.id) && <span className="text-[var(--green)]">✓</span>}
-              {timedOut.has(c.id) && !submitted.has(c.id) && (
-                <span className="text-[var(--red)]" title="Timed out">✗</span>
-              )}
-            </button>
-          ))}
+                <span className="font-mono">{i + 1}</span>
+                <span className="hidden md:inline">{c.title.split(' ')[0]}</span>
+                {isPassed ? (
+                  <span className="text-[9px] px-1 rounded bg-green-800/40 text-green-400 border border-green-700/40 font-semibold">PASSED</span>
+                ) : (
+                  <span
+                    className="text-[10px] px-1 rounded border"
+                    style={{ color: DIFFICULTY_COLORS[c.difficulty], borderColor: DIFFICULTY_COLORS[c.difficulty] }}
+                  >
+                    {c.difficulty[0]}
+                  </span>
+                )}
+                {submitted.has(c.id) && !isPassed && <span className="text-[var(--green)]">✓</span>}
+                {timedOut.has(c.id) && !submitted.has(c.id) && (
+                  <span className="text-[var(--red)]" title="Timed out">✗</span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Session info + finish */}
@@ -294,25 +332,32 @@ export default function ChallengeArena() {
               onSubmit={handleSubmit}
               lineCount={lineCount}
               onLineCountChange={setLineCount}
+              readOnly={passed.has(activeChallenge.id)}
             />
           </div>
           <div className="h-10 flex items-center justify-between px-3 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
             <span className="text-[10px] text-[var(--muted)]">
-              {lineCount} lines · Ctrl+Enter to run
+              {passed.has(activeChallenge.id) ? 'Challenge passed — read only' : `${lineCount} lines · Ctrl+Enter to run`}
             </span>
             {submitError && (
               <span className="text-[10px] text-[var(--red)] truncate max-w-xs">{submitError}</span>
             )}
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs bg-[var(--blue)] hover:bg-blue-500 disabled:opacity-50 text-white rounded transition-colors"
-            >
-              {submitting ? (
-                <span className="animate-spin w-3 h-3 border border-white border-t-transparent rounded-full" />
-              ) : '▶'}
-              Run Tests
-            </button>
+            {passed.has(activeChallenge.id) ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 text-xs bg-green-800/30 text-green-400 border border-green-700/40 rounded">
+                ✓ All Tests Passed
+              </span>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || deepStatus === 'running'}
+                className="flex items-center gap-1.5 px-3 py-1 text-xs bg-[var(--blue)] hover:bg-blue-500 disabled:opacity-50 text-white rounded transition-colors"
+              >
+                {submitting || deepStatus === 'running' ? (
+                  <span className="animate-spin w-3 h-3 border border-white border-t-transparent rounded-full" />
+                ) : '▶'}
+                Run Tests
+              </button>
+            )}
           </div>
         </div>
 

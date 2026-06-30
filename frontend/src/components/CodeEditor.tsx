@@ -7,9 +7,10 @@ interface CodeEditorProps {
   onSubmit: () => void
   lineCount: number
   onLineCountChange: (count: number) => void
+  readOnly?: boolean
 }
 
-export default function CodeEditor({ value, onChange, onSubmit, onLineCountChange }: CodeEditorProps) {
+export default function CodeEditor({ value, onChange, onSubmit, onLineCountChange, readOnly }: CodeEditorProps) {
   const handleMount: OnMount = (editor, monaco) => {
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       onSubmit()
@@ -37,6 +38,7 @@ export default function CodeEditor({ value, onChange, onSubmit, onLineCountChang
         scrollBeyondLastLine: false,
         wordWrap: 'on',
         tabSize: 4,
+        readOnly: readOnly ?? false,
         automaticLayout: true,
         lineNumbers: 'on',
         renderLineHighlight: 'all',
