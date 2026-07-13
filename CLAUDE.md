@@ -44,17 +44,40 @@ They exist for the recruiter-facing solutions page, not for automated harness ru
 
 ## Architecture
 
-**Submission flow** (`SubmissionController.submit` → `CodeAnalysisService` → `GitHubActionsService` → `WebhookController` → `WebSocketService`):
-1. `POST /api/submissions` saves a new `Submission` row, runs JavaParser AST analysis synchronously
-   (`CodeAnalysisService`), and returns the instant result in the HTTP response.
-2. `GitHubActionsService.triggerWorkflow` (`@Async`) dispatches a GitHub Actions `workflow_dispatch`
+**Submission flow is a genuinely gated two-stage pipeline** (`SubmissionController.submit` →
+[gate] → `GitHubActionsService` → `WebhookController` → `WebSocketService`):
+1. `POST /api/submissions` saves a new `Submission` row and runs JavaParser AST analysis
+   synchronously (`CodeAnalysisService`) — this always happens and is always shown.
+2. **Stage 1 → Stage 2 gate, in `SubmissionController` itself**: only if the *raw* structural score
+   (`result.getInstantScore()`, before the hint penalty) is `>= AST_GATE_THRESHOLD` (70) does it call
+   `gitHubActionsService.triggerWorkflow(...)`. Below the threshold, `SubmissionController` pushes the
+   AST result over WebSocket itself (`sendInstantResult`) and **never calls GitHub Actions** — no CI
+   run is spent on structurally-broken code. This is deliberate: JUnit (Stage 2) is meant to be the
+   authoritative signal, but only once Stage 1 says the structure is plausible.
+3. `GitHubActionsService.triggerWorkflow` (`@Async`) dispatches a GitHub Actions `workflow_dispatch`
    that injects the candidate's code into `challenge-tests/challenge-N/CandidateSubmission.java` and
-   runs `mvn test` there. On success it pushes `DEEP_STARTED` over WebSocket.
-3. GitHub Actions POSTs results to `POST /api/webhook/github` (HMAC-validated via `X-Webhook-Secret`),
+   runs `mvn test` there. The dispatch HTTP call itself retries up to 2 more times (2s, then 5s
+   backoff) on failure before falling back to the AST result — see `MAX_DISPATCH_ATTEMPTS`/
+   `RETRY_BACKOFF_MS`. This only covers a failure to *trigger* the run (network/API blip); it does not
+   change the separate 5-minute no-webhook-arrived timeout fallback (`scheduleTimeoutFallback`), which
+   is intentionally not retried (re-firing a whole new multi-minute CI run after a timeout would
+   roughly double a candidate's worst-case wait). On a successful dispatch it pushes `DEEP_STARTED`
+   over WebSocket.
+4. GitHub Actions POSTs results to `POST /api/webhook/github` (HMAC-validated via `X-Webhook-Secret`),
    which updates the `Submission` row and pushes `DEEP_RESULT` over WebSocket.
-4. All WebSocket messages go to STOMP topic `/topic/session/{sessionId}` with a `type` discriminator
+5. All WebSocket messages go to STOMP topic `/topic/session/{sessionId}` with a `type` discriminator
    (`INSTANT_RESULT` | `DEEP_STARTED` | `DEEP_RESULT` | `ERROR`) and a `challengeId`; the frontend
    `useWebSocket` hook filters incoming messages against the currently active challenge.
+
+**A `DEEP_RESULT`/`DEEP_DONE` with `totalCount === 0` is not a real result — it's reclassified as an
+error, never a pass.** If the candidate's code fails to *compile* inside GitHub Actions, Maven never
+reaches the Surefire test phase, so `evaluate.yml` reports `0/0` tests (see its XML/stdout parsing
+fallback). Both places that interpret a deep result — `useWebSocket.ts`'s `handleMessage` (`DEEP_RESULT`
+case) and its `fetchDeepStatus` REST-polling fallback (`DEEP_DONE` case) — check `totalCount > 0`
+before setting `deepStatus = 'done'`; a `0` total sets `deepStatus = 'error'` instead, folding it into
+the same fallback UI used for "GitHub Actions unavailable." `TestResults.tsx` further distinguishes
+this specific case (`deepResults.totalCount === 0`) to show a red "Compilation failed" badge with the
+raw build output auto-expanded, rather than the generic amber "structural only" message.
 
 **Every submission/resubmission inserts a new `Submission` row** — there is no upsert. A candidate can
 resubmit a challenge as many times as they like before passing, so `(sessionId, challengeId)` is **not**
@@ -96,6 +119,24 @@ auto-advance — and `onConnect` calls `fetchDeepStatus()`, which would re-pull 
 already exists in the DB for the newly active challenge, regardless of whether the candidate actually
 submitted anything for it in the current visit (a stale `DEEP_DONE` row from an earlier attempt would
 make a challenge look "passed" just from switching to its tab).
+
+**`TestResults.tsx`'s four render states must stay exhaustive — this has already regressed once.**
+`deepSucceeded` / `isRunning` / `isFallback` / IDLE are meant to be mutually exclusive and jointly
+exhaustive (exactly one always renders). `isFallback` must trigger whenever there's an `instantResults`
+*or* a `deepResults` to show — **not** `deepStatus !== 'idle'`. Placeholder-credentials local dev, the
+4 Kafka challenges (no JUnit harness), a Stage 1→2 gate rejection, and a GitHub dispatch exception all
+push an `INSTANT_RESULT` while `deepStatus` stays `'idle'` (deep verification never started) — gating
+`isFallback` on `deepStatus !== 'idle'` alone makes all of those render a blank panel (neither IDLE nor
+FALLBACK matches). If you touch these flags, keep IDLE defined as the *complement* of the other three
+(`!isRunning && !deepSucceeded && !isFallback`) rather than re-deriving it from `deepStatus` directly.
+
+**Editor autocomplete is a curated snippet library, not a language server.** Monaco has no semantic
+understanding of the Spring classpath. `frontend/src/lib/javaCompletions.ts` registers a
+`monaco.languages.registerCompletionItemProvider('java', ...)` with snippets scoped to exactly what
+the 10 challenges test (REST/JPA/exception-handling/WebClient/Security/Kafka patterns). Registration
+is guarded by a module-level flag (`registered`) since Monaco's completion registry is global, not
+per-editor-instance — `CodeEditor.tsx` calls it on every mount, so without the guard every suggestion
+would appear duplicated after a remount.
 
 **Auth is two separate JWT-based mechanisms**, both stateless: candidate sessions (`POST
 /api/auth/login`, UUID `sessionId` stored in `localStorage`, sent as the bearer token / basic-auth

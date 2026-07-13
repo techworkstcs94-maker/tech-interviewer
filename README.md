@@ -16,7 +16,7 @@ A production-grade technical interview platform for assessing Spring Boot Micros
   - [Real-time Communication (WebSocket)](#real-time-communication-websocket)
   - [Database](#database)
   - [Authentication](#authentication)
-- [The 6 Challenges](#the-6-challenges)
+- [The 10 Challenges](#the-10-challenges)
 - [Key Design Decisions](#key-design-decisions)
 - [Infrastructure & Deployment](#infrastructure--deployment)
 - [Project Structure](#project-structure)
@@ -47,25 +47,30 @@ Browser (React + Monaco Editor)
         ▼
 Spring Boot Backend (Render.com)
         │
-   ┌────┴────────────────────────┐
-   │                             │
-JavaParser AST analysis     GitHub API dispatch
-(synchronous, ~200ms)       (async, fire-and-forget)
-   │                             │
-   │ WebSocket push         GitHub Actions runner
-   │ (instant score)        mvn test on challenge-N
-   │                             │
-   │                        Webhook POST /api/webhook/github
-   │                             │
-   └────────────────────────────►│
-                                 │ WebSocket push
-                                 │ (deep score + JUnit output)
-                             React UI updates
+  JavaParser AST analysis (synchronous, ~200ms)
+        │
+        │ WebSocket push (instant score)
+        ▼
+  structural score >= 70? ──── no ──► stop — AST result is final, no CI spent
+        │
+       yes
+        ▼
+  GitHub API dispatch (async; retries up to 2x more on failure, 2s/5s backoff)
+        │
+  GitHub Actions runner
+  mvn test on challenge-N
+        │
+  Webhook POST /api/webhook/github
+        │
+        │ WebSocket push (deep score + JUnit output)
+        ▼
+  React UI updates
 ```
 
-**Two-path evaluation:**
-- **Path 1 (Instant):** Synchronous. JavaParser parses the submitted Java source into an AST, checks for required annotations/patterns, and returns a 0–100 score with per-test-case feedback within 200–300ms.
-- **Path 2 (Deep):** Asynchronous. The backend base64-encodes the submitted code and calls the GitHub Actions `workflow_dispatch` API. A runner checks out the repo, injects the candidate's code into the challenge project, runs `mvn test`, and POSTs results back to the backend via a webhook. The backend pushes results to the candidate's browser over WebSocket.
+**Two-stage, gated evaluation:**
+- **Stage 1 (Instant):** Synchronous. JavaParser parses the submitted Java source into an AST, checks for required annotations/patterns, and returns a 0–100 score with per-test-case feedback within 200–300ms. This result is always shown.
+- **Gate:** Stage 2 only runs if the Stage 1 structural score is `>= 70` (`SubmissionController.AST_GATE_THRESHOLD`). Below that, the AST result is reported as final and GitHub Actions is never dispatched — deep verification is meant to be authoritative, but only once the structure is plausible, and it isn't worth spending a CI run on code that's still structurally broken.
+- **Stage 2 (Deep):** Asynchronous. The backend base64-encodes the submitted code and calls the GitHub Actions `workflow_dispatch` API, retrying the dispatch call itself up to 2 more times on a transient failure before giving up and falling back to the Stage 1 result. Once dispatched, a runner checks out the repo, injects the candidate's code into the challenge project, runs `mvn test`, and POSTs results back to the backend via a webhook. The backend pushes results to the candidate's browser over WebSocket. A webhook reporting `0` tests run (the candidate's code failed to compile) is treated as inconclusive, not a pass or a real score — the UI falls back to showing the build output instead of a JUnit result.
 
 ---
 
@@ -122,6 +127,17 @@ JavaParser AST analysis     GitHub API dispatch
 // Auto-saves every 30s; restored on challenge tab switch
 ```
 
+**Editor autocomplete (`lib/javaCompletions.ts`):**
+Monaco's built-in "java" language mode has no semantic understanding of the Spring classpath (no
+import resolution, no method signatures), so autocomplete is a curated snippet library instead of a
+language server — `registerJavaCompletions` registers a
+`monaco.languages.registerCompletionItemProvider('java', ...)` with snippets scoped to exactly what
+the 10 challenges test (`@RestController`/`@GetMapping` handlers, `@Service` + constructor injection,
+`@Entity`/`JpaRepository`, `@RestControllerAdvice` handlers, `WebClient`/`@CircuitBreaker`,
+`SecurityFilterChain`/JWT, `@KafkaListener`/`@RetryableTopic`/`@Transactional`). `CodeEditor.tsx` calls
+it on every mount but a module-level flag prevents re-registering (Monaco's completion registry is
+global, not per-editor-instance).
+
 **Build trick (Vercel):**
 The Vercel build environment loses execute permissions on `.bin/` symlinks. The `package.json` build script bypasses this:
 ```json
@@ -147,11 +163,12 @@ This avoids CORS entirely — the browser talks to Vercel's edge, which proxies 
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `GET` | `/api/challenges` | None | List all 6 challenges |
+| `GET` | `/api/challenges` | None | List all 10 challenges |
 | `GET` | `/api/challenges/{id}` | None | Single challenge detail |
 | `POST` | `/api/sessions/start` | None | Create candidate session (returns UUID) |
 | `PUT` | `/api/sessions/{id}/complete` | Session UUID | Mark session complete |
-| `POST` | `/api/submissions` | Session UUID | Submit code → triggers both evaluation paths |
+| `POST` | `/api/submissions` | Session UUID | Submit code → Stage 1 always, Stage 2 gated on the Stage 1 score |
+| `GET` | `/api/submissions/status` | Session UUID | Poll the latest submission's status (reconnect/fallback path) |
 | `POST` | `/api/webhook/github` | HMAC secret | Receive deep evaluation results from GitHub Actions |
 | `GET` | `/api/recruiter/sessions` | JWT | All sessions for recruiter dashboard |
 | `POST` | `/auth/login` | — | Return JWT for recruiter |
@@ -161,16 +178,21 @@ This avoids CORS entirely — the browser talks to Vercel's edge, which proxies 
 POST /api/submissions
   → save submission to DB
   → call CodeAnalysisService.analyzeCode(code, challenge)  [synchronous]
-  → WebSocketService.sendInstantResult(sessionId, result)  [push to browser]
-  → GitHubActionsService.triggerWorkflow(sessionId, challengeId, code)  [@Async, returns immediately]
+  → structural score >= 70 (AST_GATE_THRESHOLD)?
+      no  → WebSocketService.sendInstantResult(sessionId, result)  [push to browser, stop here]
+      yes → GitHubActionsService.triggerWorkflow(sessionId, challengeId, code)  [@Async, returns immediately]
   → return 200 to frontend
 ```
+The AST result is *never* pushed twice for the same submission — either the gate rejects it and
+`SubmissionController` sends it directly, or the gate passes and `GitHubActionsService` becomes
+responsible for eventually reporting something (a deep result, or its own AST fallback if GitHub
+Actions is unavailable/fails after retries/times out).
 
 **Key services:**
 
 `CodeAnalysisService` — wraps JavaParser. For each challenge it has a set of `TestCase` definitions each with a `predicate: CompilationUnit → Boolean`. The score is `Σ(passed_weight) / Σ(all_weights) * 100`.
 
-`GitHubActionsService` — uses `WebClient` to call `POST /repos/{owner}/{repo}/actions/workflows/evaluate.yml/dispatches` with base64-encoded code as a workflow input. The `@Async` annotation runs this in a thread pool so the submission response is not blocked.
+`GitHubActionsService` — uses `WebClient` to call `POST /repos/{owner}/{repo}/actions/workflows/evaluate.yml/dispatches` with base64-encoded code as a workflow input. The `@Async` annotation runs this in a thread pool so the submission response is not blocked. The dispatch call retries up to 2 more times (2s, then 5s backoff) on failure before falling back to the AST result — a separate, non-retried 5-minute timeout still covers the case where dispatch succeeds but no webhook ever arrives.
 
 `WebSocketService` — wraps `SimpMessagingTemplate`. Sends to `/topic/session/{sessionId}`. Every message has a `type` discriminator field so the frontend can route it:
 ```java
@@ -185,6 +207,12 @@ Map.of("type", "ERROR", "message", "...")
 ---
 
 ### Hybrid Evaluation Pipeline
+
+Stage 2 is **gated** on Stage 1: `SubmissionController` only calls `GitHubActionsService` when the
+Stage 1 structural score is `>= 70`. Below that, the AST result is reported as final and no GitHub
+Actions run is dispatched — there is no value in spending CI minutes verifying JUnit behavior of code
+that doesn't even have the required annotations/structure yet, and it gives the candidate immediate,
+actionable feedback to fix before their code is compiled for real.
 
 #### Stage 1: JavaParser Instant Analysis
 
@@ -243,6 +271,17 @@ The candidate's code is base64-encoded by the backend and passed as a `workflow_
 5. Runs `mvn test --no-transfer-progress`
 6. Parses results from Surefire XML reports (`target/surefire-reports/TEST-*.xml`) with a stdout fallback
 7. POSTs results to the backend webhook with HMAC verification
+
+**A `0`-test result means the candidate's code failed to compile, not that it scored zero.** If step 5
+fails at the compile phase, Maven never reaches Surefire — there's no XML report and no "Tests run:"
+line in stdout, so step 6 correctly parses `0/0`. The backend/frontend treat this as inconclusive
+rather than a real (if poor) JUnit result: the results panel shows a "Compilation failed" state with
+the raw build output, never a pass, and never blends it with the Stage 1 structural score.
+
+**If the dispatch call itself fails** (network blip, GitHub API error — not a candidate code issue),
+`GitHubActionsService` retries it up to 2 more times with backoff before giving up and reporting the
+Stage 1 result as final. This is separate from the run actually starting and then never reporting back
+within 5 minutes, which has its own (non-retried) timeout fallback.
 
 **Why strip `public` from class declarations?**
 In Java, a `public class Foo` must be in a file named `Foo.java`. Since the candidate's controller is named `ProductController` but the file is `CandidateSubmission.java`, the compiler rejects it. Making it package-private (`class ProductController`) removes the filename constraint while keeping it visible within the same package.
@@ -353,16 +392,25 @@ jdbc:postgresql://db.xxx.supabase.co:6543/postgres?prepareThreshold=0
 
 ---
 
-## The 6 Challenges
+## The 10 Challenges
 
-| # | Title | Difficulty | Concepts Tested | Time |
-|---|-------|-----------|-----------------|------|
-| 1 | REST Controller Basics | EASY | `@RestController`, `@GetMapping`, `@PathVariable`, `ResponseEntity` | 10 min |
-| 2 | Service Layer Pattern | MEDIUM | `@Service`, constructor injection, interface pattern, custom exceptions, input validation | 15 min |
-| 3 | Spring Data JPA | MEDIUM | `@Entity`, `@Id`, `JpaRepository`, derived queries, `@Query` JPQL | 15 min |
-| 4 | Global Exception Handling | MEDIUM | `@ControllerAdvice`, `@ExceptionHandler`, `@ResponseStatus`, DTO pattern | 12 min |
-| 5 | WebClient + Circuit Breaker | HARD | `WebClient`, Resilience4j `@CircuitBreaker`, timeout config, error handling | 20 min |
-| 6 | JWT Security Configuration | HARD | `SecurityFilterChain`, `OncePerRequestFilter`, `Jwts.builder()`, stateless sessions | 25 min |
+| # | Title | Difficulty | Concepts Tested | Time | Stage 2 (JUnit) |
+|---|-------|-----------|-----------------|------|------|
+| 1 | REST Controller Basics | EASY | `@RestController`, `@GetMapping`, `@PathVariable`, `ResponseEntity` | 10 min | Yes |
+| 2 | Service Layer Pattern | MEDIUM | `@Service`, constructor injection, interface pattern, custom exceptions, input validation | 15 min | Yes |
+| 3 | Spring Data JPA | MEDIUM | `@Entity`, `@Id`, `JpaRepository`, derived queries, `@Query` JPQL | 15 min | Yes |
+| 4 | Global Exception Handling | MEDIUM | `@ControllerAdvice`, `@ExceptionHandler`, `@ResponseStatus`, DTO pattern | 12 min | Yes |
+| 5 | WebClient + Circuit Breaker | HARD | `WebClient`, Resilience4j `@CircuitBreaker`, timeout config, error handling | 20 min | Yes |
+| 6 | JWT Security Configuration | HARD | `SecurityFilterChain`, `OncePerRequestFilter`, `Jwts.builder()`, stateless sessions | 25 min | Yes |
+| 7 | Kafka Producer Basics | EASY | `KafkaTemplate`, constructor injection, partition keys | 10 min | No — structural only |
+| 8 | Kafka Consumer Groups | MEDIUM | `@KafkaListener`, consumer groups, manual acknowledgment | 15 min | No — structural only |
+| 9 | Dead Letter Topic Pattern | MEDIUM | `@RetryableTopic`, exponential backoff, `@DltHandler` | 15 min | No — structural only |
+| 10 | Transactional Kafka Producer | HARD | `@Transactional`, `ProducerFactory`, exactly-once semantics | 20 min | No — structural only |
+
+Challenges 1-6 have a JUnit project under `challenge-tests/challenge-N/` and go through the full
+gated two-stage pipeline. Challenges 7-10 (Kafka) don't have a JUnit harness yet
+(`GitHubActionsService.JUNIT_ENABLED_CHALLENGES`), so they're always scored by Stage 1 (AST) alone —
+GitHub Actions is never dispatched for them regardless of score.
 
 Each challenge has:
 - A description with exact requirements
@@ -380,7 +428,9 @@ Each challenge has:
 **Speed vs accuracy tradeoff:**
 - Pure AST analysis (JavaParser): 200ms, catches structural patterns, can miss runtime behavior
 - Pure JUnit testing (GitHub Actions): 2–4 minutes, definitive, catches logic errors
-- Together: candidates get immediate feedback (instant) while the authoritative result (deep) arrives asynchronously
+- Together, gated: candidates always get immediate structural feedback, but the slow, CI-minute-costing
+  JUnit stage only runs once that structural score clears a bar (`>= 70`) — the authoritative deep
+  result then arrives asynchronously. Code that's still structurally wrong never reaches Stage 2 at all.
 
 ### Why GitHub Actions for deep evaluation?
 
