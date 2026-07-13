@@ -1,5 +1,6 @@
 import React from 'react'
 import Editor, { OnMount } from '@monaco-editor/react'
+import { registerJavaCompletions } from '../lib/javaCompletions'
 
 interface CodeEditorProps {
   value: string
@@ -12,6 +13,8 @@ interface CodeEditorProps {
 
 export default function CodeEditor({ value, onChange, onSubmit, onLineCountChange, readOnly }: CodeEditorProps) {
   const handleMount: OnMount = (editor, monaco) => {
+    registerJavaCompletions(monaco)
+
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       onSubmit()
     })
@@ -44,6 +47,12 @@ export default function CodeEditor({ value, onChange, onSubmit, onLineCountChang
         renderLineHighlight: 'all',
         bracketPairColorization: { enabled: true },
         padding: { top: 12, bottom: 12 },
+        quickSuggestions: { other: true, comments: false, strings: false },
+        suggestOnTriggerCharacters: true,
+        tabCompletion: 'on',
+        parameterHints: { enabled: true },
+        wordBasedSuggestions: 'currentDocument',
+        acceptSuggestionOnEnter: 'on',
       }}
     />
   )
