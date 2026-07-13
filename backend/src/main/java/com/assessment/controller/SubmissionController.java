@@ -25,6 +25,10 @@ import java.util.Map;
 @Slf4j
 public class SubmissionController {
 
+    // Below this raw structural score, code is considered too structurally broken to be worth a
+    // GitHub Actions run — report the AST result immediately instead of spending CI time on it.
+    private static final int AST_GATE_THRESHOLD = 70;
+
     private final SubmissionRepository submissionRepository;
     private final CodeAnalysisService codeAnalysisService;
     private final GitHubActionsService gitHubActionsService;
@@ -64,7 +68,16 @@ public class SubmissionController {
             log.error("Failed to serialize instant results", e);
         }
 
-        gitHubActionsService.triggerWorkflow(sessionId, request.getChallengeId(), request.getCode(), submission.getId(), adjustedResult);
+        // Stage 1 (AST) gate: only proceed to the slower, CI-minute-costing Stage 2 (GitHub
+        // Actions JUnit verification) once the structure is sound. Otherwise report the AST
+        // result now and stop — never call GitHub Actions for structurally broken code.
+        if (result.getInstantScore() >= AST_GATE_THRESHOLD) {
+            gitHubActionsService.triggerWorkflow(sessionId, request.getChallengeId(), request.getCode(), submission.getId(), adjustedResult);
+        } else {
+            log.info("Structural score {} below gate threshold {} — skipping GitHub Actions for session={} challenge={}",
+                    result.getInstantScore(), AST_GATE_THRESHOLD, sessionId, request.getChallengeId());
+            webSocketService.sendInstantResult(sessionId, request.getChallengeId(), adjustedResult);
+        }
 
         return ResponseEntity.ok(new SubmissionResponse(
                 submission.getId(),

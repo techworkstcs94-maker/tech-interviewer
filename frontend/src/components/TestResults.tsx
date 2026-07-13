@@ -22,12 +22,20 @@ function ScoreBar({ score }: { score: number }) {
 export default function TestResults({ instantResults, deepResults, deepStatus }: TestResultsProps) {
   const deepSucceeded = deepStatus === 'done' && deepResults !== null
   const isRunning = deepStatus === 'running'
-  const isFallback = instantResults !== null && !deepSucceeded && !isRunning
+  // Exhaustive with IDLE below (exactly one of the four render branches always matches) —
+  // covers "GitHub Actions unavailable/timed out/gated-off by AST" (instantResults populated,
+  // deepStatus can still be 'idle' — e.g. placeholder credentials, non-JUnit challenges, an AST
+  // score below the gate, or a dispatch exception all push an instant result without ever
+  // starting deep verification) as well as "GitHub Actions ran but 0 tests executed, i.e. a
+  // compile failure" (instantResults null, deepStatus 'error', deepResults.rawOutput has the
+  // build output instead).
+  const isFallback = !deepSucceeded && !isRunning && (instantResults !== null || deepResults !== null)
+  const isCompileFailure = isFallback && deepResults !== null && deepResults.totalCount === 0
 
   const displayScore = deepSucceeded
     ? deepResults!.deepScore
     : isFallback
-      ? instantResults!.instantScore
+      ? instantResults?.instantScore
       : undefined
 
   // Elapsed timer — resets whenever running state begins
@@ -68,9 +76,15 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
             </span>
           )}
           {isFallback && (
-            <span className="text-[10px] text-[var(--amber)] bg-amber-900/15 border border-amber-800/25 px-1.5 py-0.5 rounded">
-              Structural only
-            </span>
+            isCompileFailure ? (
+              <span className="text-[10px] text-[var(--red)] bg-red-900/15 border border-red-800/25 px-1.5 py-0.5 rounded">
+                ✗ Compilation failed
+              </span>
+            ) : (
+              <span className="text-[10px] text-[var(--amber)] bg-amber-900/15 border border-amber-800/25 px-1.5 py-0.5 rounded">
+                Structural only
+              </span>
+            )
           )}
         </div>
         {displayScore !== undefined && (
@@ -85,8 +99,8 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
 
       {/* ── Body ── */}
 
-      {/* IDLE — nothing submitted yet */}
-      {deepStatus === 'idle' && !instantResults && (
+      {/* IDLE — nothing submitted yet (none of the other three states matched) */}
+      {!isRunning && !deepSucceeded && !isFallback && (
         <div className="px-3 py-10 flex flex-col items-center gap-2 text-[var(--muted)]">
           <span className="text-2xl opacity-20">▶</span>
           <span className="text-xs">Submit your code to run tests</span>
@@ -211,44 +225,65 @@ export default function TestResults({ instantResults, deepResults, deepStatus }:
         </div>
       )}
 
-      {/* FALLBACK — structural analysis only (GitHub not configured or timed out) */}
+      {/* FALLBACK — GitHub Actions unavailable/timed out, or ran but compiled zero tests */}
       {isFallback && (
         <div className="p-3 space-y-2">
-          <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] text-[var(--amber)] bg-amber-900/10 border border-amber-800/25 rounded">
-            <span className="shrink-0">⚠</span>
+          <div className={`flex items-center gap-1.5 px-2 py-1.5 text-[10px] rounded ${
+            isCompileFailure
+              ? 'text-[var(--red)] bg-red-900/10 border border-red-800/25'
+              : 'text-[var(--amber)] bg-amber-900/10 border border-amber-800/25'
+          }`}>
+            <span className="shrink-0">{isCompileFailure ? '✗' : '⚠'}</span>
             <span>
-              {deepStatus === 'error'
-                ? 'JUnit verification unavailable — showing structural analysis only'
-                : 'Structural analysis complete'}
+              {isCompileFailure
+                ? 'GitHub Actions ran but no tests executed — your code likely failed to compile. See the build output below.'
+                : deepStatus === 'error'
+                  ? 'JUnit verification unavailable — showing structural analysis only'
+                  : 'Structural analysis complete'}
             </span>
           </div>
 
-          {instantResults!.parseError && (
+          {instantResults?.parseError && (
             <div className="flex items-start gap-1.5 px-2 py-1.5 text-[10px] text-[var(--red)] bg-red-900/10 border border-red-800/25 rounded">
               <span className="shrink-0">✗</span>
-              <span>Parse error: {instantResults!.parseError}</span>
+              <span>Parse error: {instantResults.parseError}</span>
             </div>
           )}
 
-          <ScoreBar score={instantResults!.instantScore ?? 0} />
-
-          <div className="space-y-0.5">
-            {instantResults!.testResults.map((t) => (
-              <div key={t.id} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-[var(--elevated)]">
-                <span className={`mt-0.5 shrink-0 text-xs ${t.passed ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
-                  {t.passed ? '✓' : '✗'}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-xs ${t.passed ? 'text-[var(--green)]' : 'text-[var(--text)]'}`}>
-                    {t.label}
+          {instantResults && (
+            <>
+              <ScoreBar score={instantResults.instantScore ?? 0} />
+              <div className="space-y-0.5">
+                {instantResults.testResults.map((t) => (
+                  <div key={t.id} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-[var(--elevated)]">
+                    <span className={`mt-0.5 shrink-0 text-xs ${t.passed ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
+                      {t.passed ? '✓' : '✗'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-xs ${t.passed ? 'text-[var(--green)]' : 'text-[var(--text)]'}`}>
+                        {t.label}
+                      </div>
+                      {!t.passed && t.feedback && (
+                        <div className="text-[10px] text-[var(--muted)] mt-0.5">{t.feedback}</div>
+                      )}
+                    </div>
                   </div>
-                  {!t.passed && t.feedback && (
-                    <div className="text-[10px] text-[var(--muted)] mt-0.5">{t.feedback}</div>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
+
+          {deepResults?.rawOutput && (
+            <details open className="border border-[var(--border)] rounded overflow-hidden">
+              <summary className="px-3 py-2 bg-[var(--elevated)] text-[10px] text-[var(--muted)] hover:text-[var(--text)] cursor-pointer select-none flex items-center justify-between list-none">
+                <span>Build output</span>
+                <span className="text-[9px] opacity-50">▼ collapse</span>
+              </summary>
+              <pre className="p-3 bg-[var(--surface)] text-[10px] font-mono leading-relaxed text-[var(--muted)] overflow-x-auto whitespace-pre-wrap max-h-52 overflow-y-auto">
+                {atob(deepResults.rawOutput)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
     </div>

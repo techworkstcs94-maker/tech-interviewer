@@ -75,8 +75,17 @@ export function useWebSocket(
           rawOutput: data.rawOutput ?? '',
         }
         setDeepResults(result)
-        setDeepStatus('done')
-        addLog('success', `JUnit result: ${result.passedCount}/${result.totalCount} tests passed · ${result.deepScore}/100`)
+        if (result.totalCount > 0) {
+          setDeepStatus('done')
+          addLog('success', `JUnit result: ${result.passedCount}/${result.totalCount} tests passed · ${result.deepScore}/100`)
+        } else {
+          // GitHub Actions completed but ran zero tests — almost always a compile failure in
+          // the candidate's code, not a legitimate 0-score run. Never treat this as a finished,
+          // authoritative JUnit result (it would render as a false "0/0 passed" checkmark) —
+          // fold it into the same fallback state used when deep verification is unavailable.
+          setDeepStatus('error')
+          addLog('warning', 'GitHub Actions ran but no tests executed — likely a compilation error')
+        }
       }
     } catch {
       // Network error — will retry on next poll tick
@@ -120,8 +129,14 @@ export function useWebSocket(
       case 'DEEP_RESULT': {
         const result = msg.payload as DeepResult
         setDeepResults(result)
-        setDeepStatus('done')
-        addLog('success', `JUnit complete · ${result.passedCount}/${result.totalCount} tests passed · Score: ${result.deepScore}/100`)
+        if (result.totalCount > 0) {
+          setDeepStatus('done')
+          addLog('success', `JUnit complete · ${result.passedCount}/${result.totalCount} tests passed · Score: ${result.deepScore}/100`)
+        } else {
+          // Same reclassification as the fetchDeepStatus path above, for the live-push case.
+          setDeepStatus('error')
+          addLog('warning', 'GitHub Actions ran but no tests executed — likely a compilation error')
+        }
         break
       }
       case 'ERROR':
