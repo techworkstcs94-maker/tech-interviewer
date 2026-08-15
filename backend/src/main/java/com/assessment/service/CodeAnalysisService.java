@@ -50,6 +50,18 @@ public class CodeAnalysisService {
                     results = analyzeChallenge6(cu, code);
                     weights = List.of(15, 14, 14, 14, 14, 15, 14);
                 }
+                case 11 -> {
+                    results = analyzeBugFix11(cu, code);
+                    weights = List.of(20, 20, 20, 20, 20);
+                }
+                case 12 -> {
+                    results = analyzeBugFix12(cu, code);
+                    weights = List.of(25, 25, 30, 20);
+                }
+                case 13 -> {
+                    results = analyzeBugFix13(cu, code);
+                    weights = List.of(20, 30, 25, 25);
+                }
                 default -> {
                     return new AnalysisResult(List.of(), 0, 0, "Unknown challenge: " + challengeId);
                 }
@@ -338,6 +350,97 @@ public class CodeAnalysisService {
         return results;
     }
 
+    // ── Bug-fix challenges ───────────────────────────────────────────────────────
+    // The starter code is already structurally complete; the bug is behavioral. These AST
+    // checks act as the Stage-1 gate (must still parse + keep the required structure, and the
+    // fix leaves a detectable marker), while JUnit in Stage 2 is the authoritative judge.
+
+    // Challenge 11: controller returns 200 for a missing product — fix returns 404.
+    private List<TestResult> analyzeBugFix11(CompilationUnit cu, String code) {
+        List<TestResult> results = new ArrayList<>();
+
+        boolean t1 = cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                .anyMatch(c -> hasAnnotation(c, "RestController"));
+        results.add(tr("t1", "@RestController present", t1,
+                t1 ? "Found @RestController" : "Do not remove @RestController from the controller"));
+
+        boolean t2 = cu.findAll(MethodDeclaration.class).stream()
+                .anyMatch(m -> hasAnnotation(m, "GetMapping") && m.getTypeAsString().contains("List"));
+        results.add(tr("t2", "@GetMapping list endpoint intact", t2,
+                t2 ? "List endpoint present" : "Keep the GET /api/products list endpoint returning a List"));
+
+        boolean t3 = cu.findAll(MethodDeclaration.class).stream()
+                .anyMatch(m -> m.getParameters().stream().anyMatch(p -> hasAnnotation(p, "PathVariable")));
+        results.add(tr("t3", "@PathVariable for id", t3,
+                t3 ? "Found @PathVariable" : "Keep @PathVariable Long id on the by-id endpoint"));
+
+        boolean t4 = code.contains("notFound") || code.contains("NOT_FOUND") || code.contains("404");
+        results.add(tr("t4", "404 returned for missing product", t4,
+                t4 ? "Found 404 handling" : "Return ResponseEntity.notFound().build() when the product is not found"));
+
+        boolean t5 = cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                .anyMatch(c -> c.getNameAsString().contains("Product")
+                        && hasField(c, "id") && hasField(c, "name")
+                        && hasField(c, "price") && hasField(c, "category"));
+        results.add(tr("t5", "Product model fields intact", t5,
+                t5 ? "Product model unchanged" : "Do not remove fields from the Product model"));
+
+        return results;
+    }
+
+    // Challenge 12: exception handler maps not-found to 500 — fix maps it to 404.
+    private List<TestResult> analyzeBugFix12(CompilationUnit cu, String code) {
+        List<TestResult> results = new ArrayList<>();
+
+        boolean t1 = cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                .anyMatch(c -> hasAnnotation(c, "ControllerAdvice") || hasAnnotation(c, "RestControllerAdvice"));
+        results.add(tr("t1", "@RestControllerAdvice present", t1,
+                t1 ? "Found @RestControllerAdvice" : "Keep the @RestControllerAdvice class"));
+
+        boolean t2 = cu.findAll(MethodDeclaration.class).stream()
+                .anyMatch(m -> hasAnnotation(m, "ExceptionHandler")
+                        && m.toString().contains("ResourceNotFoundException"));
+        results.add(tr("t2", "@ExceptionHandler(ResourceNotFoundException)", t2,
+                t2 ? "Found handler" : "Keep @ExceptionHandler(ResourceNotFoundException.class)"));
+
+        boolean t3 = (code.contains("NOT_FOUND") || code.contains("404"))
+                && !code.contains("INTERNAL_SERVER_ERROR");
+        results.add(tr("t3", "Handler returns 404 (not 500)", t3,
+                t3 ? "Maps to 404" : "Change the status from INTERNAL_SERVER_ERROR (500) to NOT_FOUND (404)"));
+
+        boolean t4 = code.contains("ErrorResponse") && (code.contains("getMessage") || code.contains("message"));
+        results.add(tr("t4", "ErrorResponse body with message", t4,
+                t4 ? "ErrorResponse intact" : "Keep returning the ErrorResponse body with the exception message"));
+
+        return results;
+    }
+
+    // Challenge 13: service validation is inverted — fix rejects invalid, accepts valid.
+    private List<TestResult> analyzeBugFix13(CompilationUnit cu, String code) {
+        List<TestResult> results = new ArrayList<>();
+
+        boolean t1 = cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                .anyMatch(c -> hasAnnotation(c, "Service"));
+        results.add(tr("t1", "@Service on ProductService", t1,
+                t1 ? "Found @Service" : "Keep @Service on the service class"));
+
+        boolean t2 = code.contains("price") && (code.contains("<= 0") || code.contains("< 0"));
+        results.add(tr("t2", "Rejects price <= 0", t2,
+                t2 ? "Price validation corrected" : "Throw when price <= 0 (currently it throws when price > 0)"));
+
+        boolean t3 = code.contains("isBlank") || code.contains("isEmpty");
+        results.add(tr("t3", "Rejects blank name", t3,
+                t3 ? "Name validation present" : "Throw when the name is blank (name.isBlank())"));
+
+        boolean t4 = cu.findAll(ThrowStmt.class).stream()
+                .anyMatch(t -> t.getExpression().toString().contains("ProductValidationException"))
+                || code.contains("ProductValidationException");
+        results.add(tr("t4", "Throws ProductValidationException", t4,
+                t4 ? "Found custom exception" : "Keep throwing ProductValidationException on invalid input"));
+
+        return results;
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private int computeScore(List<TestResult> results, List<Integer> weights) {
@@ -452,6 +555,25 @@ public class CodeAnalysisService {
                 tr("t5", "JwtAuthenticationFilter extends OncePerRequestFilter", false, "Parse error"),
                 tr("t6", "JWT generation with claims", false, "Parse error"),
                 tr("t7", "Login endpoint returns token", false, "Parse error")
+            );
+            case 11 -> List.of(
+                tr("t1", "@RestController present", false, "Parse error"),
+                tr("t2", "@GetMapping list endpoint intact", false, "Parse error"),
+                tr("t3", "@PathVariable for id", false, "Parse error"),
+                tr("t4", "404 returned for missing product", false, "Parse error"),
+                tr("t5", "Product model fields intact", false, "Parse error")
+            );
+            case 12 -> List.of(
+                tr("t1", "@RestControllerAdvice present", false, "Parse error"),
+                tr("t2", "@ExceptionHandler(ResourceNotFoundException)", false, "Parse error"),
+                tr("t3", "Handler returns 404 (not 500)", false, "Parse error"),
+                tr("t4", "ErrorResponse body with message", false, "Parse error")
+            );
+            case 13 -> List.of(
+                tr("t1", "@Service on ProductService", false, "Parse error"),
+                tr("t2", "Rejects price <= 0", false, "Parse error"),
+                tr("t3", "Rejects blank name", false, "Parse error"),
+                tr("t4", "Throws ProductValidationException", false, "Parse error")
             );
             default -> List.of();
         };

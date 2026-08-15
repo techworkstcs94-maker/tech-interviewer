@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { getRecruiterSessions, deleteRecruiterSession } from '../api/sessions'
 import { cheatRiskLabel, cheatRiskColor, cheatRiskBg } from '../lib/cheatConstants'
+import ManageChallengesModal from '../components/ManageChallengesModal'
 import type { SessionSummary } from '../types'
 
 export default function RecruiterDashboard() {
@@ -13,6 +14,7 @@ export default function RecruiterDashboard() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<keyof SessionSummary>('startTime')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [manageOpen, setManageOpen] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('recruiterToken')
@@ -166,6 +168,17 @@ export default function RecruiterDashboard() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={() => setManageOpen(true)}
+              style={{
+                background: 'var(--accent)', border: 'none',
+                borderRadius: '8px', color: 'var(--on-accent)',
+                padding: '6px 16px', cursor: 'pointer',
+                fontSize: '0.85rem', fontFamily: 'var(--font-ui)', fontWeight: 700,
+              }}
+            >
+              ⚙ Manage Challenges
+            </button>
             {sessions.length > 0 && (
               <span style={{
                 background: 'rgba(78,222,163,0.1)', border: '1px solid rgba(78,222,163,0.25)',
@@ -433,6 +446,8 @@ export default function RecruiterDashboard() {
           </>
         )}
       </main>
+
+      <ManageChallengesModal open={manageOpen} onClose={() => setManageOpen(false)} />
     </div>
   )
 }

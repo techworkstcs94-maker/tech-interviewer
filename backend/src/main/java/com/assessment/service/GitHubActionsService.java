@@ -43,8 +43,10 @@ public class GitHubActionsService {
                 .build();
     }
 
-    // Challenges with JUnit test directories in challenge-tests/challenge-N
-    private static final java.util.Set<Long> JUNIT_ENABLED_CHALLENGES = java.util.Set.of(1L, 2L, 3L, 4L, 5L, 6L);
+    // Challenges with JUnit test directories in challenge-tests/challenge-N.
+    // Public so recruiter-facing endpoints can flag which challenges are deep-verified.
+    public static final java.util.Set<Long> JUNIT_ENABLED_CHALLENGES =
+            java.util.Set.of(1L, 2L, 3L, 4L, 5L, 6L, 11L, 12L, 13L);
 
     // Dispatch retry policy — 1 initial attempt + 2 retries with short backoff, for transient
     // GitHub Actions/API issues (not candidate code problems).

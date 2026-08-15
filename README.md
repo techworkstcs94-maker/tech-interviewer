@@ -16,7 +16,7 @@ A production-grade technical interview platform for assessing Spring Boot Micros
   - [Real-time Communication (WebSocket)](#real-time-communication-websocket)
   - [Database](#database)
   - [Authentication](#authentication)
-- [The 10 Challenges](#the-10-challenges)
+- [The 13 Challenges](#the-13-challenges)
 - [Key Design Decisions](#key-design-decisions)
 - [Infrastructure & Deployment](#infrastructure--deployment)
 - [Project Structure](#project-structure)
@@ -148,8 +148,8 @@ The Vercel build environment loses execute permissions on `.bin/` symlinks. The 
 ```json
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://javamsainterviewer.onrender.com/api/:path*" },
-    { "source": "/ws/:path*",  "destination": "https://javamsainterviewer.onrender.com/ws/:path*" }
+    { "source": "/api/:path*", "destination": "https://tech-interviewer.onrender.com/api/:path*" },
+    { "source": "/ws/:path*",  "destination": "https://tech-interviewer.onrender.com/ws/:path*" }
   ]
 }
 ```
@@ -163,8 +163,10 @@ This avoids CORS entirely — the browser talks to Vercel's edge, which proxies 
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `GET` | `/api/challenges` | None | List all 10 challenges |
+| `GET` | `/api/challenges` | Candidate | List **active** challenges (recruiter-selected set) |
 | `GET` | `/api/challenges/{id}` | None | Single challenge detail |
+| `GET` | `/api/recruiter/challenges` | Recruiter | Full challenge catalog with `active`/`deepVerified` flags |
+| `PUT` | `/api/recruiter/challenges/active` | Recruiter | Replace the global active set (`{activeIds:[...]}`) |
 | `POST` | `/api/sessions/start` | None | Create candidate session (returns UUID) |
 | `PUT` | `/api/sessions/{id}/complete` | Session UUID | Mark session complete |
 | `POST` | `/api/submissions` | Session UUID | Submit code → Stage 1 always, Stage 2 gated on the Stage 1 score |
@@ -392,7 +394,12 @@ jdbc:postgresql://db.xxx.supabase.co:6543/postgres?prepareThreshold=0
 
 ---
 
-## The 10 Challenges
+## The 13 Challenges
+
+Challenges 1-6 build a feature from scratch, 7-10 are Kafka (structural-only), and 11-13 are
+**bug-fix** challenges: the candidate is handed already-wired Spring code with a planted bug and must
+fix the behavior. Recruiters choose which of these are shown to candidates via the dashboard's
+**Manage Challenges** panel (`challenges.active`); the table below is the full catalog.
 
 | # | Title | Difficulty | Concepts Tested | Time | Stage 2 (JUnit) |
 |---|-------|-----------|-----------------|------|------|
@@ -406,11 +413,16 @@ jdbc:postgresql://db.xxx.supabase.co:6543/postgres?prepareThreshold=0
 | 8 | Kafka Consumer Groups | MEDIUM | `@KafkaListener`, consumer groups, manual acknowledgment | 15 min | No — structural only |
 | 9 | Dead Letter Topic Pattern | MEDIUM | `@RetryableTopic`, exponential backoff, `@DltHandler` | 15 min | No — structural only |
 | 10 | Transactional Kafka Producer | HARD | `@Transactional`, `ProducerFactory`, exactly-once semantics | 20 min | No — structural only |
+| 11 | Fix the Product Controller | MEDIUM | Bug fix — missing product must return 404 not 200 | 10 min | Yes |
+| 12 | Fix the Global Exception Handler | MEDIUM | Bug fix — not-found must map to 404 not 500 | 10 min | Yes |
+| 13 | Fix the Service Validation | MEDIUM | Bug fix — inverted price/name validation | 12 min | Yes |
 
-Challenges 1-6 have a JUnit project under `challenge-tests/challenge-N/` and go through the full
-gated two-stage pipeline. Challenges 7-10 (Kafka) don't have a JUnit harness yet
+Challenges 1-6 and 11-13 have a JUnit project under `challenge-tests/challenge-N/` and go through the
+full gated two-stage pipeline. Challenges 7-10 (Kafka) don't have a JUnit harness yet
 (`GitHubActionsService.JUNIT_ENABLED_CHALLENGES`), so they're always scored by Stage 1 (AST) alone —
-GitHub Actions is never dispatched for them regardless of score.
+GitHub Actions is never dispatched for them regardless of score. The bug-fix challenges (11-13) ship
+buggy starter code; their AST checks act as the Stage-1 gate (structure intact + parses) while JUnit
+decides pass/fail.
 
 Each challenge has:
 - A description with exact requirements
@@ -499,8 +511,43 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 
 | Secret | Value |
 |--------|-------|
-| `BACKEND_CALLBACK_URL` | `https://javamsainterviewer.onrender.com` |
+| `BACKEND_CALLBACK_URL` | `https://tech-interviewer.onrender.com` |
 | `WEBHOOK_SECRET` | Same value as `WEBHOOK_SECRET` env var on Render |
+| `SUPABASE_URL` | *(optional)* `https://xxx.supabase.co` — enables the direct Supabase keepalive |
+| `SUPABASE_ANON_KEY` | *(optional)* Supabase anon/public key, same purpose |
+
+### Keeping the free tier awake
+
+Both free tiers idle out, on different clocks, and the fix for each is different:
+
+| Platform | Idles after | Consequence | Recovery |
+|----------|-------------|-------------|----------|
+| Render (free web service) | 15 min without an inbound HTTP request | Cold start of 40-60s on the next request | Automatic, just slow |
+| Supabase (free project) | 7 days without API/DB activity | Project **paused** | **Manual** restore from the dashboard |
+
+`.github/workflows/keepalive.yml` handles both:
+
+- The **`ping`** job hits `GET /api/ping` every 10 minutes. That endpoint deliberately runs
+  `challengeRepository.count()` rather than returning a static `{"status":"UP"}` like `/api/health`
+  does — a real query is what resets Supabase's inactivity clock, so one ping keeps *both* services
+  alive.
+- The **`supabase`** job talks to the Supabase REST API directly. This is the case the `ping` job
+  cannot cover: if Render is down, suspended, or mid-failed-deploy, the database receives no traffic
+  at all and pauses after 7 days. The job is skipped automatically when `SUPABASE_URL` /
+  `SUPABASE_ANON_KEY` are not configured.
+
+**GitHub Actions cron is a backup, not the primary pinger.** Scheduled workflows are throttled
+during high load — runs are frequently minutes late and are sometimes dropped entirely, which is
+enough to miss Render's 15-minute window. More importantly, **GitHub disables scheduled workflows
+after 60 days with no repository activity**, at which point the keepalive silently stops with no
+failure notification. Point a free external uptime monitor (cron-job.org, UptimeRobot, or similar)
+at `https://tech-interviewer.onrender.com/api/ping` on a 10-minute interval as the primary, and let
+this workflow be the redundant second source.
+
+**Watch the instance-hours budget.** Render's free plan allows 750 instance-hours per month *across
+the whole account*. Pinging every 10 minutes means the service never sleeps, which is ~730 hours —
+essentially the entire allowance. A second free service on the same account will exceed the cap and
+get suspended (which is what produces `x-render-routing: no-server`).
 
 ### Render Environment Variables
 

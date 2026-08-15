@@ -41,4 +41,8 @@ public class Challenge {
 
     @Column(name = "concepts_json", columnDefinition = "TEXT")
     private String conceptsJson;
+
+    // Global recruiter-controlled selection: only active challenges are served to candidates.
+    @Column(nullable = false)
+    private Boolean active = true;
 }

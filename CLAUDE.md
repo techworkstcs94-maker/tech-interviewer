@@ -92,12 +92,34 @@ placeholder`). With placeholders, `GitHubActionsService` skips the GitHub dispat
 verification running" UI and `DEEP_STARTED`/`DEEP_RESULT` messages are only observable against a real
 GitHub-configured backend (staging/prod), not local dev.
 
-**10 challenges exist, but only 6 have deep verification.** `DataInitializer` seeds 10 challenges
-(1-6: REST/Service/JPA/Exceptions/WebClient/Security; 7-10: Kafka producer/consumer-groups/DLT/
-transactional). Only challenges 1-6 have a JUnit project under `challenge-tests/challenge-N/`, and
-`GitHubActionsService.JUNIT_ENABLED_CHALLENGES` is hardcoded to `{1..6}` — challenges 7-10 always get
-structural-analysis-only scoring (`sendInstantResult`, no GH Actions dispatch). If a Kafka challenge
-ever gets a real JUnit harness added under `challenge-tests/challenge-N/`, that set must be updated too.
+**13 challenges exist, but only 9 have deep verification.** `DataInitializer` (local) seeds them;
+prod gets them via Flyway migrations (`V1`/`V6` = 1-10, `V8` = 11-13). Layout: 1-6 build-from-scratch
+(REST/Service/JPA/Exceptions/WebClient/Security); 7-10 Kafka (producer/consumer-groups/DLT/
+transactional, **structural-only**, no JUnit harness); 11-13 **bug-fix** (controller 404 / exception
+handler status / inverted service validation). JUnit projects exist under `challenge-tests/challenge-N/`
+for 1-6 and 11-13, and `GitHubActionsService.JUNIT_ENABLED_CHALLENGES` is hardcoded to
+`{1..6, 11..13}` — the Kafka challenges (7-10) always get structural-analysis-only scoring
+(`sendInstantResult`, no GH Actions dispatch). **Three places are keyed by literal challenge id and
+must move together when adding a deep-verified challenge:** the `switch` in `CodeAnalysisService.analyze`
+(+ its `getFailedResults` fallback), `JUNIT_ENABLED_CHALLENGES`, and a `challenge-tests/challenge-N/`
+folder. `evaluate.yml` resolves the folder as `challenge-${challenge_id}` and injects a universal import
+set, so bug-fix challenges that only touch plain MVC/Core code need **no** workflow edit; a challenge
+needing JPA/Security/etc. imports still needs a `case` added to `evaluate.yml`.
+
+**Bug-fix challenges invert the meaning of the AST stage.** Their starter code is already structurally
+complete (the bug is behavioral), so the `analyzeBugFixNN` methods act only as the Stage-1 gate: they
+verify the code still parses and keeps the required structure (returning a high score so it clears
+`AST_GATE_THRESHOLD`), and let JUnit be the authority. Each bug-fix harness is designed so the buggy
+starter fails ≥1 test and the reference fix passes all — validated locally by injecting each into
+`CandidateSubmission.java` and running `mvn test`.
+
+**Recruiter-controlled global challenge selection.** `challenges.active` (added in `V7`, default TRUE)
+is a single global set shared by every candidate — there is no per-candidate assignment. `GET
+/api/challenges` (candidate-facing) returns only `active` challenges via
+`findByActiveTrueOrderByIdAsc`; the recruiter dashboard's "Manage Challenges" modal reads all of them
+via `GET /api/recruiter/challenges` (each flagged `deepVerified`) and replaces the set via
+`PUT /api/recruiter/challenges/active` (rejects an empty selection). Changing the set affects new page
+loads; candidates already mid-assessment keep what they loaded.
 
 **Frontend per-challenge/per-submission state resets are intentionally synchronous, not effect-based.**
 `useWebSocket(sessionId, challengeId)` resets `instantResults`/`deepResults`/`deepStatus` **during

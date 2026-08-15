@@ -1,12 +1,15 @@
 package com.assessment.controller;
 
 import com.assessment.dto.SessionReportDto;
+import com.assessment.model.Challenge;
 import com.assessment.model.CheatEvent;
 import com.assessment.model.Submission;
 import com.assessment.repository.CandidateSessionRepository;
+import com.assessment.repository.ChallengeRepository;
 import com.assessment.repository.CheatEventRepository;
 import com.assessment.repository.SubmissionRepository;
 import com.assessment.security.JwtUtil;
+import com.assessment.service.GitHubActionsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/recruiter")
@@ -27,7 +32,49 @@ public class RecruiterController {
     private final CandidateSessionRepository sessionRepository;
     private final SubmissionRepository submissionRepository;
     private final CheatEventRepository cheatEventRepository;
+    private final ChallengeRepository challengeRepository;
     private final JwtUtil jwtUtil;
+
+    // ── Global challenge selection ────────────────────────────────────────────
+    // All challenges with their active flag and whether they are deep-verified (JUnit-backed),
+    // so the dashboard can render the selection list. Ordered by id for a stable UI.
+    @GetMapping("/challenges")
+    public ResponseEntity<List<Map<String, Object>>> getAllChallengesForAdmin() {
+        List<Map<String, Object>> challenges = challengeRepository.findAll().stream()
+                .sorted((a, b) -> Long.compare(a.getId(), b.getId()))
+                .map(c -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", c.getId());
+                    m.put("title", c.getTitle());
+                    m.put("difficulty", c.getDifficulty());
+                    m.put("category", c.getCategory());
+                    m.put("active", Boolean.TRUE.equals(c.getActive()));
+                    m.put("deepVerified", GitHubActionsService.JUNIT_ENABLED_CHALLENGES.contains(c.getId()));
+                    return m;
+                })
+                .toList();
+        return ResponseEntity.ok(challenges);
+    }
+
+    // Replace the active set in one pass. Rejects an empty selection — candidates must always
+    // have at least one challenge to attempt.
+    @Transactional
+    @PutMapping("/challenges/active")
+    public ResponseEntity<?> setActiveChallenges(@RequestBody Map<String, List<Long>> body) {
+        List<Long> activeIds = body.getOrDefault("activeIds", List.of());
+        if (activeIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "At least one challenge must be selected"));
+        }
+        Set<Long> selected = Set.copyOf(activeIds);
+        List<Challenge> all = challengeRepository.findAll();
+        all.forEach(c -> c.setActive(selected.contains(c.getId())));
+        challengeRepository.saveAll(all);
+        List<Long> persisted = all.stream()
+                .filter(c -> Boolean.TRUE.equals(c.getActive()))
+                .map(Challenge::getId)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(Map.of("activeIds", persisted));
+    }
 
     @GetMapping("/sessions")
     public ResponseEntity<List<Map<String, Object>>> getAllSessions() {
@@ -154,6 +201,15 @@ public class RecruiterController {
             ),
             new Ch("ch6", "JWT Security Configuration", "HARD", "Security",
                 "// SecurityConfig\n@Configuration\n@EnableWebSecurity\nclass SecurityConfig {\n    private final JwtAuthFilter jwtAuthFilter;\n\n    SecurityConfig(JwtAuthFilter jwtAuthFilter) { this.jwtAuthFilter = jwtAuthFilter; }\n\n    @Bean\n    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {\n        http\n            .csrf(csrf -> csrf.disable())\n            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))\n            .authorizeHttpRequests(auth -> auth\n                .requestMatchers(\"/auth/**\").permitAll()\n                .anyRequest().authenticated())\n            .exceptionHandling(ex -> ex.authenticationEntryPoint(\n                (req, res, e) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)))\n            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);\n        return http.build();\n    }\n}\n\n// JwtService\n@Service\nclass JwtService {\n    private final SecretKey key;\n    private final long expiryMs;\n\n    JwtService(@Value(\"${security.jwt.secret}\") String secret,\n               @Value(\"${security.jwt.expiry-ms:3600000}\") long expiryMs) {\n        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));\n        this.expiryMs = expiryMs;\n    }\n\n    String generate(String username) {\n        Date now = new Date();\n        return Jwts.builder()\n                .subject(username).issuedAt(now)\n                .expiration(new Date(now.getTime() + expiryMs))\n                .signWith(key).compact();\n    }\n\n    String validateAndGetSubject(String token) {\n        return Jwts.parser().verifyWith(key).build()\n                .parseSignedClaims(token).getPayload().getSubject();\n    }\n}\n\n// JwtAuthFilter\n@Component\nclass JwtAuthFilter extends OncePerRequestFilter {\n    private final JwtService jwtService;\n\n    JwtAuthFilter(JwtService jwtService) { this.jwtService = jwtService; }\n\n    @Override\n    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,\n                                    FilterChain chain) throws ServletException, IOException {\n        String header = req.getHeader(\"Authorization\");\n        if (header != null && header.startsWith(\"Bearer \")) {\n            try {\n                String subject = jwtService.validateAndGetSubject(header.substring(7));\n                SecurityContextHolder.getContext().setAuthentication(\n                    new UsernamePasswordAuthenticationToken(subject, null, AuthorityUtils.NO_AUTHORITIES));\n            } catch (Exception ex) {\n                SecurityContextHolder.clearContext();\n            }\n        }\n        chain.doFilter(req, res);\n    }\n}\n\n// AuthController\n@RestController @RequestMapping(\"/auth\")\nclass AuthController {\n    private final JwtService jwtService;\n    AuthController(JwtService jwtService) { this.jwtService = jwtService; }\n\n    @PostMapping(\"/login\")\n    ResponseEntity<?> login(@RequestBody Map<String, String> creds) {\n        if (\"user\".equals(creds.get(\"username\")) && \"password\".equals(creds.get(\"password\")))\n            return ResponseEntity.ok(Map.of(\"token\", jwtService.generate(creds.get(\"username\"))));\n        return ResponseEntity.status(HttpServletResponse.SC_UNAUTHORIZED).build();\n    }\n}"
+            ),
+            new Ch("ch11", "Fix the Product Controller", "MEDIUM", "Bug Fix",
+                "// BUG: byId() returned 200 with an empty body when the product was missing.\n// FIX: return 404 when the product is not found.\n\n@RestController\n@RequestMapping(\"/api/products\")\nclass ProductController {\n\n    private final List<Product> products = new ArrayList<>(List.of(\n        new Product(1L, \"Mechanical Keyboard\", 89.99, \"Peripherals\"),\n        new Product(2L, \"27\\\" Monitor\", 199.50, \"Displays\")\n    ));\n\n    @GetMapping\n    public List<Product> all() { return products; }\n\n    @GetMapping(\"/{id}\")\n    public ResponseEntity<Product> byId(@PathVariable Long id) {\n        Product found = null;\n        for (Product p : products) {\n            if (p.getId().equals(id)) found = p;\n        }\n        if (found == null) {\n            return ResponseEntity.notFound().build();   // ← the fix\n        }\n        return ResponseEntity.ok(found);\n    }\n}\n\nclass Product {\n    private Long id; private String name; private Double price; private String category;\n    public Product() {}\n    public Product(Long id, String name, Double price, String category) {\n        this.id = id; this.name = name; this.price = price; this.category = category;\n    }\n    public Long getId() { return id; }\n    public String getName() { return name; }\n    public Double getPrice() { return price; }\n    public String getCategory() { return category; }\n}"
+            ),
+            new Ch("ch12", "Fix the Global Exception Handler", "MEDIUM", "Bug Fix",
+                "// BUG: ResourceNotFoundException was mapped to 500 (INTERNAL_SERVER_ERROR).\n// FIX: a missing resource must map to 404 (NOT_FOUND).\n\n@RestController\n@RequestMapping(\"/api/items\")\nclass ItemController {\n\n    @GetMapping(\"/{id}\")\n    public String getItem(@PathVariable Long id) {\n        if (id > 100) {\n            throw new ResourceNotFoundException(\"Item \" + id + \" not found\");\n        }\n        return \"item-\" + id;\n    }\n}\n\n@RestControllerAdvice\nclass GlobalExceptionHandler {\n\n    @ExceptionHandler(ResourceNotFoundException.class)\n    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {\n        return ResponseEntity.status(HttpStatus.NOT_FOUND)          // ← was INTERNAL_SERVER_ERROR\n                .body(new ErrorResponse(404, ex.getMessage()));     // ← was 500\n    }\n}\n\nclass ResourceNotFoundException extends RuntimeException {\n    public ResourceNotFoundException(String message) { super(message); }\n}\n\nclass ErrorResponse {\n    private int status; private String message;\n    public ErrorResponse(int status, String message) { this.status = status; this.message = message; }\n    public int getStatus() { return status; }\n    public String getMessage() { return message; }\n}"
+            ),
+            new Ch("ch13", "Fix the Service Validation", "MEDIUM", "Bug Fix",
+                "// BUG: validation was inverted — valid input was rejected, invalid input passed.\n// FIX: throw when price <= 0 and when the name is blank.\n\n@Service\nclass ProductService {\n\n    public Product create(Product p) {\n        if (p.getPrice() == null || p.getPrice() <= 0) {          // ← was: price > 0\n            throw new ProductValidationException(\"Price must be greater than 0\");\n        }\n        if (p.getName() == null || p.getName().isBlank()) {        // ← was: !name.isBlank()\n            throw new ProductValidationException(\"Name must not be blank\");\n        }\n        return p;\n    }\n}\n\n@RestController\n@RequestMapping(\"/api/products\")\nclass ProductController {\n\n    private final ProductService service;\n    ProductController(ProductService service) { this.service = service; }\n\n    @PostMapping\n    public ResponseEntity<Product> create(@RequestBody Product p) {\n        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(p));\n    }\n\n    @ExceptionHandler(ProductValidationException.class)\n    public ResponseEntity<String> handleValidation(ProductValidationException ex) {\n        return ResponseEntity.badRequest().body(ex.getMessage());\n    }\n}\n\nclass ProductValidationException extends RuntimeException {\n    public ProductValidationException(String message) { super(message); }\n}\n\nclass Product {\n    private String name; private Double price;\n    public String getName() { return name; }\n    public void setName(String name) { this.name = name; }\n    public Double getPrice() { return price; }\n    public void setPrice(Double price) { this.price = price; }\n}"
             )
         );
 
@@ -209,10 +265,10 @@ public class RecruiterController {
             + "  <div class=\"cover\">\n"
             + "    <div class=\"cover-tag\">Internal Reference &mdash; Recruiter Use Only</div>\n"
             + "    <h1>Java MSA Interviewer<br><span>Assessment Solutions</span></h1>\n"
-            + "    <div class=\"cover-sub\">Challenge Solutions Reference &middot; 10 challenges</div>\n"
+            + "    <div class=\"cover-sub\">Challenge Solutions Reference &middot; 13 challenges</div>\n"
             + "    <div class=\"cover-meta\">\n"
             + "      <span><strong>2</strong> Easy</span>\n"
-            + "      <span><strong>5</strong> Medium</span>\n"
+            + "      <span><strong>8</strong> Medium</span>\n"
             + "      <span><strong>3</strong> Hard</span>\n"
             + "      <span>Generated " + LocalDate.now() + "</span>\n"
             + "    </div>\n"
@@ -229,6 +285,9 @@ public class RecruiterController {
             + "    <div class=\"toc-row\"><span>Kafka Consumer Groups</span><span class=\"toc-tag\">ch8 &middot; MEDIUM &middot; Kafka</span></div>\n"
             + "    <div class=\"toc-row\"><span>Dead Letter Topic Pattern</span><span class=\"toc-tag\">ch9 &middot; MEDIUM &middot; Kafka</span></div>\n"
             + "    <div class=\"toc-row\"><span>Transactional Kafka Producer</span><span class=\"toc-tag\">ch10 &middot; HARD &middot; Kafka</span></div>\n"
+            + "    <div class=\"toc-row\"><span>Fix the Product Controller</span><span class=\"toc-tag\">ch11 &middot; MEDIUM &middot; Bug Fix</span></div>\n"
+            + "    <div class=\"toc-row\"><span>Fix the Global Exception Handler</span><span class=\"toc-tag\">ch12 &middot; MEDIUM &middot; Bug Fix</span></div>\n"
+            + "    <div class=\"toc-row\"><span>Fix the Service Validation</span><span class=\"toc-tag\">ch13 &middot; MEDIUM &middot; Bug Fix</span></div>\n"
             + "  </div>\n\n"
             + cards
             + "\n  <p style=\"margin-top:56px;color:#aaa;font-size:.75rem;text-align:center\">"

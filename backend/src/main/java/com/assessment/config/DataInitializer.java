@@ -197,9 +197,99 @@ public class DataInitializer implements CommandLineRunner {
                 "[{\"id\":\"t1\",\"label\":\"@Service on TransactionalOrderService\",\"weight\":14},{\"id\":\"t2\",\"label\":\"@Transactional on processOrder\",\"weight\":15},{\"id\":\"t3\",\"label\":\"repository.save() called\",\"weight\":14},{\"id\":\"t4\",\"label\":\"kafkaTemplate.send() called\",\"weight\":14},{\"id\":\"t5\",\"label\":\"@Configuration on KafkaProducerConfig\",\"weight\":14},{\"id\":\"t6\",\"label\":\"ProducerFactory @Bean declared\",\"weight\":15},{\"id\":\"t7\",\"label\":\"transactionalIdPrefix configured\",\"weight\":14}]",
                 "[{\"id\":\"h1\",\"text\":\"@Transactional wraps both the DB save and the Kafka send — if either fails, both roll back\"},{\"id\":\"h2\",\"text\":\"Use DefaultKafkaProducerFactory and call factory.setTransactionIdPrefix(\\\"order-tx-\\\") in the bean\"},{\"id\":\"h3\",\"text\":\"KafkaTemplate must be created from the transactional ProducerFactory, not the default auto-configured one\"},{\"id\":\"h4\",\"text\":\"Spring's KafkaTransactionManager participates in the same transaction as JPA when both are configured correctly\"}]",
                 "[\"@Transactional\",\"Exactly-Once Semantics\",\"Transactional Producer\",\"Idempotent Producer\",\"ProducerFactory\",\"KafkaTemplate\",\"Outbox Pattern\"]"
+            ),
+            // ── Bug-fix challenges (deep-verified, ids 11-13 in prod via V8) ──────────
+            challenge(
+                "Fix the Product Controller", "MEDIUM", "Bug Fix", 600,
+                "This ProductController has a bug. GET /api/products/{id} returns HTTP 200 with an empty " +
+                "body when the product does not exist — it should return 404 Not Found instead.\n\n" +
+                "▸ Keep the list endpoint working (GET /api/products → 200 with all products)\n" +
+                "▸ Fix GET /api/products/{id} so a missing product yields 404, an existing one yields 200\n" +
+                "▸ Do not change the Product model or the sample data\n\n" +
+                "Only fix the bug — the structure is already in place.",
+                "@RestController\n@RequestMapping(\"/api/products\")\npublic class ProductController {\n\n" +
+                "    private final List<Product> products = new ArrayList<>(List.of(\n" +
+                "        new Product(1L, \"Mechanical Keyboard\", 89.99, \"Peripherals\"),\n" +
+                "        new Product(2L, \"27\\\" Monitor\", 199.50, \"Displays\")\n" +
+                "    ));\n\n" +
+                "    @GetMapping\n    public List<Product> all() {\n        return products;\n    }\n\n" +
+                "    @GetMapping(\"/{id}\")\n    public ResponseEntity<Product> byId(@PathVariable Long id) {\n" +
+                "        Product found = null;\n        for (Product p : products) {\n" +
+                "            if (p.getId().equals(id)) {\n                found = p;\n            }\n        }\n" +
+                "        // BUG: returns 200 OK even when the product was not found — should be 404\n" +
+                "        return ResponseEntity.ok(found);\n    }\n}\n\n" +
+                "class Product {\n    private Long id;\n    private String name;\n    private Double price;\n" +
+                "    private String category;\n\n    public Product() {}\n" +
+                "    public Product(Long id, String name, Double price, String category) {\n" +
+                "        this.id = id; this.name = name; this.price = price; this.category = category;\n    }\n" +
+                "    public Long getId() { return id; }\n    public String getName() { return name; }\n" +
+                "    public Double getPrice() { return price; }\n    public String getCategory() { return category; }\n}",
+                "[{\"id\":\"t1\",\"label\":\"@RestController present\",\"weight\":20},{\"id\":\"t2\",\"label\":\"@GetMapping list endpoint intact\",\"weight\":20},{\"id\":\"t3\",\"label\":\"@PathVariable for id\",\"weight\":20},{\"id\":\"t4\",\"label\":\"404 returned for missing product\",\"weight\":20},{\"id\":\"t5\",\"label\":\"Product model fields intact\",\"weight\":20}]",
+                "[{\"id\":\"h1\",\"text\":\"The bug is in byId(): it always returns ResponseEntity.ok(...) regardless of whether the product was found\"},{\"id\":\"h2\",\"text\":\"When found is null, return ResponseEntity.notFound().build() instead of ResponseEntity.ok(found)\"},{\"id\":\"h3\",\"text\":\"An existing id (1 or 2) must still return 200 with the product body\"}]",
+                "[\"Bug Fix\",\"@RestController\",\"ResponseEntity\",\"404 Handling\",\"Spring MVC\"]"
+            ),
+            challenge(
+                "Fix the Global Exception Handler", "MEDIUM", "Bug Fix", 600,
+                "The @RestControllerAdvice below maps ResourceNotFoundException to the wrong HTTP status. " +
+                "When an item is missing, the API returns 500 Internal Server Error — it should return 404 Not Found.\n\n" +
+                "▸ GET /api/items/{id} throws ResourceNotFoundException for id > 100\n" +
+                "▸ Fix the exception handler so that case returns 404 (not 500)\n" +
+                "▸ Keep the ErrorResponse body (status + message) intact\n\n" +
+                "Only fix the bug — the handler wiring is already correct.",
+                "@RestController\n@RequestMapping(\"/api/items\")\nclass ItemController {\n\n" +
+                "    @GetMapping(\"/{id}\")\n    public String getItem(@PathVariable Long id) {\n" +
+                "        if (id > 100) {\n            throw new ResourceNotFoundException(\"Item \" + id + \" not found\");\n        }\n" +
+                "        return \"item-\" + id;\n    }\n}\n\n" +
+                "@RestControllerAdvice\nclass GlobalExceptionHandler {\n\n" +
+                "    @ExceptionHandler(ResourceNotFoundException.class)\n" +
+                "    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {\n" +
+                "        // BUG: a missing resource is not a server error — this should be 404, not 500\n" +
+                "        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)\n" +
+                "                .body(new ErrorResponse(500, ex.getMessage()));\n    }\n}\n\n" +
+                "class ResourceNotFoundException extends RuntimeException {\n" +
+                "    public ResourceNotFoundException(String message) { super(message); }\n}\n\n" +
+                "class ErrorResponse {\n    private int status;\n    private String message;\n" +
+                "    public ErrorResponse(int status, String message) { this.status = status; this.message = message; }\n" +
+                "    public int getStatus() { return status; }\n    public String getMessage() { return message; }\n}",
+                "[{\"id\":\"t1\",\"label\":\"@RestControllerAdvice present\",\"weight\":25},{\"id\":\"t2\",\"label\":\"@ExceptionHandler(ResourceNotFoundException)\",\"weight\":25},{\"id\":\"t3\",\"label\":\"Handler returns 404 (not 500)\",\"weight\":30},{\"id\":\"t4\",\"label\":\"ErrorResponse body with message\",\"weight\":20}]",
+                "[{\"id\":\"h1\",\"text\":\"The handler uses HttpStatus.INTERNAL_SERVER_ERROR — a not-found condition should map to HttpStatus.NOT_FOUND\"},{\"id\":\"h2\",\"text\":\"Change both the ResponseEntity status and the ErrorResponse status code to 404\"},{\"id\":\"h3\",\"text\":\"GET /api/items/5 must still return 200; GET /api/items/999 must return 404 with the message\"}]",
+                "[\"Bug Fix\",\"@RestControllerAdvice\",\"@ExceptionHandler\",\"HTTP Status Codes\",\"Error Handling\"]"
+            ),
+            challenge(
+                "Fix the Service Validation", "MEDIUM", "Bug Fix", 720,
+                "ProductService has inverted validation logic: it rejects VALID input and accepts invalid input. " +
+                "A product with a positive price and a non-blank name should be created (201); a non-positive " +
+                "price or a blank name should be rejected (400).\n\n" +
+                "▸ POST /api/products creates a product via ProductService.create(...)\n" +
+                "▸ Fix the validation so valid products succeed and invalid ones throw ProductValidationException\n" +
+                "▸ Keep the exception → 400 mapping intact\n\n" +
+                "Only fix the validation conditions — everything else is wired correctly.",
+                "@Service\nclass ProductService {\n\n    public Product create(Product p) {\n" +
+                "        // BUG: these conditions are inverted — valid input is rejected, invalid input passes\n" +
+                "        if (p.getPrice() != null && p.getPrice() > 0) {\n" +
+                "            throw new ProductValidationException(\"Price must be greater than 0\");\n        }\n" +
+                "        if (p.getName() != null && !p.getName().isBlank()) {\n" +
+                "            throw new ProductValidationException(\"Name must not be blank\");\n        }\n" +
+                "        return p;\n    }\n}\n\n" +
+                "@RestController\n@RequestMapping(\"/api/products\")\nclass ProductController {\n\n" +
+                "    private final ProductService service;\n" +
+                "    ProductController(ProductService service) { this.service = service; }\n\n" +
+                "    @PostMapping\n    public ResponseEntity<Product> create(@RequestBody Product p) {\n" +
+                "        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(p));\n    }\n\n" +
+                "    @ExceptionHandler(ProductValidationException.class)\n" +
+                "    public ResponseEntity<String> handleValidation(ProductValidationException ex) {\n" +
+                "        return ResponseEntity.badRequest().body(ex.getMessage());\n    }\n}\n\n" +
+                "class ProductValidationException extends RuntimeException {\n" +
+                "    public ProductValidationException(String message) { super(message); }\n}\n\n" +
+                "class Product {\n    private String name;\n    private Double price;\n" +
+                "    public String getName() { return name; }\n    public void setName(String name) { this.name = name; }\n" +
+                "    public Double getPrice() { return price; }\n    public void setPrice(Double price) { this.price = price; }\n}",
+                "[{\"id\":\"t1\",\"label\":\"@Service on ProductService\",\"weight\":20},{\"id\":\"t2\",\"label\":\"Rejects price <= 0\",\"weight\":30},{\"id\":\"t3\",\"label\":\"Rejects blank name\",\"weight\":25},{\"id\":\"t4\",\"label\":\"Throws ProductValidationException\",\"weight\":25}]",
+                "[{\"id\":\"h1\",\"text\":\"The price check throws when price > 0 — it should throw when price <= 0\"},{\"id\":\"h2\",\"text\":\"The name check throws when the name is NOT blank — it should throw when the name IS blank (isBlank())\"},{\"id\":\"h3\",\"text\":\"After fixing: name=Widget price=10 → 201; price=-5 or blank name → 400\"}]",
+                "[\"Bug Fix\",\"Input Validation\",\"@Service\",\"Custom Exception\",\"Spring Core\"]"
             )
         ));
-        log.info("Seeded 10 challenges successfully.");
+        log.info("Seeded 13 challenges successfully.");
     }
 
     private Challenge challenge(String title, String difficulty, String category, int timeLimitSeconds,

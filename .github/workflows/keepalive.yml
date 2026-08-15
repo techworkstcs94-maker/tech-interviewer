@@ -4,23 +4,99 @@ on:
   schedule:
     # Every 10 minutes — Render free tier sleeps after 15 min of inactivity.
     # This keeps the backend warm so cold starts don't hit candidates.
+    #
+    # NOTE: GitHub throttles scheduled workflows under load (runs are often
+    # late and are sometimes dropped entirely), and disables schedules
+    # altogether after 60 days with no repository activity. Treat this as a
+    # backup — see README "Keeping the free tier awake" for the external
+    # uptime monitor that is the primary pinger.
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
+  # Keeps the Render web service warm. /api/ping also runs a real DB query,
+  # so a successful ping keeps Supabase active too.
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
       - name: Ping backend
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_CALLBACK_URL }}
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 55 \
-            ${{ secrets.BACKEND_CALLBACK_URL }}/api/ping)
-          echo "Response: ${STATUS}"
-          if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 400 ]; then
-            echo "Backend is awake and database is active."
-          else
-            echo "Unexpected status ${STATUS} — Render may be restarting."
+          set -u
+          if [ -z "${BACKEND_URL}" ]; then
+            echo "::error::BACKEND_CALLBACK_URL secret is not set on this repository."
             exit 1
           fi
+          # Tolerate a trailing slash in the secret.
+          BASE="${BACKEND_URL%/}"
+
+          # Render free-tier cold starts routinely take 40-60s, so retry a few
+          # times before declaring the backend down.
+          for attempt in 1 2 3; do
+            HEADERS=$(mktemp)
+            STATUS=$(curl -s -o /dev/null -D "${HEADERS}" -w "%{http_code}" \
+              --max-time 90 "${BASE}/api/ping") || STATUS="000"
+            ROUTING=$(grep -i '^x-render-routing:' "${HEADERS}" | tr -d '\r' | cut -d' ' -f2- || true)
+            echo "Attempt ${attempt}: status=${STATUS} x-render-routing=${ROUTING:-none}"
+
+            if [ "${STATUS}" -ge 200 ] 2>/dev/null && [ "${STATUS}" -lt 400 ]; then
+              echo "Backend is awake and database is active."
+              exit 0
+            fi
+
+            # Render's edge reports no-server when nothing is deployed at the
+            # hostname: the service was deleted, suspended, or renamed. Waking
+            # it is impossible, so fail immediately instead of burning retries.
+            if [ "${ROUTING}" = "no-server" ]; then
+              echo "::error::No Render service is deployed at ${BASE} (x-render-routing: no-server). The service was deleted, suspended, or renamed — redeploy it or update the BACKEND_CALLBACK_URL secret."
+              exit 1
+            fi
+
+            if [ "${attempt}" -lt 3 ]; then sleep 20; fi
+          done
+
+          echo "::error::Backend did not respond successfully after 3 attempts (last status ${STATUS}, routing ${ROUTING:-none})."
+          exit 1
+
+  # Independent safety net for Supabase. The ping job above already keeps the
+  # DB active *via* Render, but if Render is down/suspended the database stops
+  # receiving any traffic and a free Supabase project pauses after 7 days of
+  # inactivity — which requires a manual restore from the dashboard. This job
+  # talks to Supabase directly so the DB survives a dead backend.
+  # Skips cleanly when the secrets are not configured.
+  supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -u
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "SUPABASE_URL / SUPABASE_ANON_KEY not set — skipping direct Supabase keepalive."
+            echo "The backend ping still keeps the DB active while Render is up."
+            exit 0
+          fi
+          BASE="${SUPABASE_URL%/}"
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${BASE}/rest/v1/challenges?select=id&limit=1") || STATUS="000"
+          echo "Supabase REST status: ${STATUS}"
+
+          # Any HTTP answer from PostgREST means the project is awake and the
+          # request counted as activity. Row-level security returning no rows
+          # is still a served request, so 2xx and 4xx both mean "not paused".
+          # Only a connection failure or 5xx indicates a paused/broken project.
+          if [ "${STATUS}" -ge 200 ] 2>/dev/null && [ "${STATUS}" -lt 500 ]; then
+            echo "Supabase project is active."
+            exit 0
+          fi
+
+          echo "::error::Supabase did not respond (status ${STATUS}). The project may be paused — check the Supabase dashboard."
+          exit 1

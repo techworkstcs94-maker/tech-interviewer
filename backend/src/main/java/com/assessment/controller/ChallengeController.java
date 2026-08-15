@@ -19,7 +19,7 @@ public class ChallengeController {
 
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getAllChallenges() {
-        List<Map<String, Object>> challenges = challengeRepository.findAll().stream()
+        List<Map<String, Object>> challenges = challengeRepository.findByActiveTrueOrderByIdAsc().stream()
                 .map(c -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("id", c.getId());
