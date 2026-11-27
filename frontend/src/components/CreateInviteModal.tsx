@@ -77,8 +77,15 @@ export default function CreateInviteModal({ open, onClose, onCreated }: Props) {
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateEmail.trim())
-  const canCreate = !saving && !loading && selected.length > 0
-    && title.trim() !== '' && candidateName.trim() !== '' && emailValid
+  // First thing still missing — shown next to the disabled button so it's clear *why* it's disabled
+  // (any number of challenges ≥ 1 is fine; there is no requirement to select all of them).
+  const missing =
+    title.trim() === '' ? 'Add an assessment title'
+    : candidateName.trim() === '' ? "Add the candidate's name"
+    : !emailValid ? 'Enter a valid candidate email'
+    : selected.length === 0 ? 'Select at least one challenge'
+    : null
+  const canCreate = !saving && !loading && missing === null
 
   const handleCreate = async () => {
     if (!canCreate) return
@@ -198,7 +205,15 @@ export default function CreateInviteModal({ open, onClose, onCreated }: Props) {
                 </div>
               </div>
 
-              <label style={{ ...labelStyle, marginTop: '8px' }}>Challenges</label>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: '8px' }}>
+                <label style={labelStyle}>
+                  Challenges — pick any number{selected.length > 0 ? ` (${selected.length} selected)` : ''}
+                </label>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button type="button" onClick={() => setSelected(challenges.map(c => c.id))} style={linkBtn}>Select all</button>
+                  <button type="button" onClick={() => setSelected([])} style={linkBtn}>Clear</button>
+                </div>
+              </div>
               {loading ? (
                 <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
               ) : (
@@ -252,8 +267,11 @@ export default function CreateInviteModal({ open, onClose, onCreated }: Props) {
               padding: '16px 24px', borderTop: '1px solid var(--border)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
             }}>
-              <span style={{ fontSize: '0.8rem', color: error ? 'var(--danger)' : 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-                {error || `${selected.length} of ${challenges.length} selected`}
+              <span style={{
+                fontSize: '0.8rem', fontFamily: 'var(--font-ui)',
+                color: error ? 'var(--danger)' : missing ? 'var(--warning)' : 'var(--success)',
+              }}>
+                {error || missing || `${selected.length} challenge${selected.length !== 1 ? 's' : ''} · ${formatDuration(totalSeconds)} — ready to create`}
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={onClose} style={secondaryBtn}>Cancel</button>
@@ -267,6 +285,11 @@ export default function CreateInviteModal({ open, onClose, onCreated }: Props) {
       </div>
     </div>
   )
+}
+
+const linkBtn: React.CSSProperties = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+  color: 'var(--accent)', fontSize: '0.75rem', fontFamily: 'var(--font-ui)',
 }
 
 const secondaryBtn: React.CSSProperties = {
