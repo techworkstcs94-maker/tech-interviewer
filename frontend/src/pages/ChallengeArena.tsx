@@ -216,9 +216,11 @@ export default function ChallengeArena() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'h') { e.preventDefault(); setHintsOpen(o => !o) }
-      if (e.ctrlKey && !isNaN(Number(e.key)) && Number(e.key) >= 1 && Number(e.key) <= 6) {
+      // Ctrl+1..9 jumps to that tab — bounded by this assessment's challenge count
+      const idx = Number(e.key) - 1
+      if (e.ctrlKey && Number.isInteger(idx) && idx >= 0 && idx < Math.min(9, latest.current.challenges.length)) {
         e.preventDefault()
-        setActiveIdx(Number(e.key) - 1)
+        setActiveIdx(idx)
       }
     }
     window.addEventListener('keydown', handler)
@@ -279,6 +281,7 @@ export default function ChallengeArena() {
     localStorage.setItem('completedSessionId', sessionId)
     localStorage.removeItem('sessionId')
     localStorage.removeItem('candidateName')
+    localStorage.removeItem('inviteToken')
     navigate('/report')
   }
 

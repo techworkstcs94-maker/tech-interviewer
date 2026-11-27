@@ -9,6 +9,7 @@ import com.assessment.repository.ChallengeRepository;
 import com.assessment.repository.CheatEventRepository;
 import com.assessment.repository.SubmissionRepository;
 import com.assessment.security.JwtUtil;
+import com.assessment.service.AssessmentInviteService;
 import com.assessment.service.GitHubActionsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -35,10 +36,10 @@ public class RecruiterController {
     private final CheatEventRepository cheatEventRepository;
     private final ChallengeRepository challengeRepository;
     private final JwtUtil jwtUtil;
+    private final AssessmentInviteService inviteService;
 
-    // ── Global challenge selection ────────────────────────────────────────────
-    // All challenges with their active flag and whether they are deep-verified (JUnit-backed),
-    // so the dashboard can render the selection list. Ordered by id for a stable UI.
+    // ── Challenge catalogue for the "Create Assessment Link" picker ───────────
+    // Every challenge with its time limit and whether it is deep-verified (JUnit-backed).
     @GetMapping("/challenges")
     public ResponseEntity<List<Map<String, Object>>> getAllChallengesForAdmin() {
         List<Map<String, Object>> challenges = challengeRepository.findAll().stream()
@@ -49,7 +50,7 @@ public class RecruiterController {
                     m.put("title", c.getTitle());
                     m.put("difficulty", c.getDifficulty());
                     m.put("category", c.getCategory());
-                    m.put("active", Boolean.TRUE.equals(c.getActive()));
+                    m.put("timeLimitSeconds", c.getTimeLimitSeconds());
                     m.put("deepVerified", GitHubActionsService.JUNIT_ENABLED_CHALLENGES.contains(c.getId()));
                     return m;
                 })
@@ -57,28 +58,9 @@ public class RecruiterController {
         return ResponseEntity.ok(challenges);
     }
 
-    // Replace the active set in one pass. Rejects an empty selection — candidates must always
-    // have at least one challenge to attempt.
-    @Transactional
-    @PutMapping("/challenges/active")
-    public ResponseEntity<?> setActiveChallenges(@RequestBody Map<String, List<Long>> body) {
-        List<Long> activeIds = body.getOrDefault("activeIds", List.of());
-        if (activeIds.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "At least one challenge must be selected"));
-        }
-        Set<Long> selected = Set.copyOf(activeIds);
-        List<Challenge> all = challengeRepository.findAll();
-        all.forEach(c -> c.setActive(selected.contains(c.getId())));
-        challengeRepository.saveAll(all);
-        List<Long> persisted = all.stream()
-                .filter(c -> Boolean.TRUE.equals(c.getActive()))
-                .map(Challenge::getId)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(Map.of("activeIds", persisted));
-    }
-
     @GetMapping("/sessions")
     public ResponseEntity<List<Map<String, Object>>> getAllSessions() {
+        Map<String, String> assessmentTitles = inviteService.titlesBySessionId();
         List<Map<String, Object>> sessions = sessionRepository.findAll().stream()
                 .map(session -> {
                     List<Submission> subs = submissionRepository.findBySessionId(session.getSessionId());
@@ -94,6 +76,7 @@ public class RecruiterController {
                     m.put("sessionId", session.getSessionId());
                     m.put("candidateName", session.getCandidateName());
                     m.put("candidateEmail", session.getCandidateEmail());
+                    m.put("assessmentTitle", assessmentTitles.getOrDefault(session.getSessionId(), ""));
                     m.put("startTime", session.getStartTime() != null ? session.getStartTime().toString() : "");
                     m.put("endTime", session.getEndTime() != null ? session.getEndTime().toString() : "");
                     m.put("status", session.getStatus().name());

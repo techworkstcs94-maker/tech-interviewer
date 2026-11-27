@@ -101,10 +101,10 @@ Spring Boot Backend (Render.com)
 
 **Pages:**
 - `/` — Landing page with animated typewriter code block
-- `/start` — Candidate registration (name + email → creates a session)
+- `/a/{token}` — Candidate entry via a recruiter-issued, single-use assessment link (shows title, challenge count and total time, then starts the session)
 - `/challenge` — Main assessment arena (editor + results + timer)
 - `/report` — End-of-session summary
-- `/recruiter` — JWT-protected admin view of all sessions and submissions
+- `/recruiter` — JWT-protected admin view: create/revoke assessment links, review sessions and submissions
 
 **State management:** All state is React `useState`/`useEffect`. No Redux — the complexity doesn't justify it. Key state objects:
 - `codes: Record<challengeId, string>` — editor content per challenge, auto-saved to `localStorage` every 30s
@@ -163,13 +163,16 @@ This avoids CORS entirely — the browser talks to Vercel's edge, which proxies 
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `GET` | `/api/challenges` | Candidate | List **active** challenges (recruiter-selected set) |
-| `GET` | `/api/challenges/{id}` | None | Single challenge detail |
-| `GET` | `/api/recruiter/challenges` | Recruiter | Full challenge catalog with `active`/`deepVerified` flags |
-| `PUT` | `/api/recruiter/challenges/active` | Recruiter | Replace the global active set (`{activeIds:[...]}`) |
-| `POST` | `/api/sessions/start` | None | Create candidate session (returns UUID) |
+| `GET` | `/api/challenges` | Candidate | The session's challenges — exactly those on its assessment link, in the recruiter's order |
+| `GET` | `/api/challenges/{id}` | Candidate | Single challenge detail (403 if not on the session's link) |
+| `GET` | `/api/recruiter/challenges` | Recruiter | Full challenge catalog with `timeLimitSeconds`/`deepVerified` |
+| `GET` | `/api/recruiter/invites` | Recruiter | All assessment links with status (pending / in progress / completed / expired / revoked) |
+| `POST` | `/api/recruiter/invites` | Recruiter | Create a single-use link: `{title, candidateName, candidateEmail, challengeIds, expiresInDays}` |
+| `POST` | `/api/recruiter/invites/{id}/revoke` | Recruiter | Revoke an unused link |
+| `GET` | `/api/invites/{token}` | None | Public link summary (title, candidate name, challenge count, total time, state) |
+| `POST` | `/api/auth/login` | None | Use a link: `{inviteToken}` → candidate session + JWT (409 if already used, 410 if expired/revoked) |
 | `PUT` | `/api/sessions/{id}/complete` | Session UUID | Mark session complete |
-| `POST` | `/api/submissions` | Session UUID | Submit code → Stage 1 always, Stage 2 gated on the Stage 1 score |
+| `POST` | `/api/submissions` | Session UUID | Submit code → Stage 1 always, Stage 2 gated on the Stage 1 score (403 if not on the link or past the deadline) |
 | `GET` | `/api/submissions/status` | Session UUID | Poll the latest submission's status (reconnect/fallback path) |
 | `POST` | `/api/webhook/github` | HMAC secret | Receive deep evaluation results from GitHub Actions |
 | `GET` | `/api/recruiter/sessions` | JWT | All sessions for recruiter dashboard |
@@ -350,7 +353,7 @@ CREATE TABLE candidate_sessions (
     id VARCHAR(36) PRIMARY KEY,  -- UUID
     candidate_name VARCHAR(255), candidate_email VARCHAR(255),
     status VARCHAR(50),          -- ACTIVE / COMPLETED / EXPIRED
-    time_limit_seconds INTEGER,  -- V9: assessment-level budget = sum of active challenge limits at login
+    time_limit_seconds INTEGER,  -- V9: assessment-level budget = sum of the link's challenge limits
     started_at TIMESTAMP, completed_at TIMESTAMP
 );
 
@@ -381,7 +384,7 @@ jdbc:postgresql://db.xxx.supabase.co:6543/postgres?prepareThreshold=0
 **Two distinct auth mechanisms:**
 
 **Candidate sessions:**
-- Created by `POST /api/sessions/start` — returns a UUID
+- Created by `POST /api/auth/login {inviteToken}` when the candidate opens their single-use link — returns a UUID + JWT
 - UUID stored in `localStorage`; sent with every submission as a header
 - No passwords; sessions are scoped to the browser tab
 - Code snapshots in `localStorage` are keyed `javamsa_code_{sessionId}_{challengeId}` so they don't bleed across sessions
@@ -399,8 +402,8 @@ jdbc:postgresql://db.xxx.supabase.co:6543/postgres?prepareThreshold=0
 
 Challenges 1-6 build a feature from scratch, 7-10 are Kafka (structural-only), and 11-13 are
 **bug-fix** challenges: the candidate is handed already-wired Spring code with a planted bug and must
-fix the behavior. Recruiters choose which of these are shown to candidates via the dashboard's
-**Manage Challenges** panel (`challenges.active`); the table below is the full catalog.
+fix the behavior. For each candidate the recruiter picks any subset (and order) of these when creating
+an assessment link on the dashboard; the table below is the full catalog.
 
 | # | Title | Difficulty | Concepts Tested | Time | Stage 2 (JUnit) |
 |---|-------|-----------|-----------------|------|------|

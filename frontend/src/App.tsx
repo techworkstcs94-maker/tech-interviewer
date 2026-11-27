@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Landing from './pages/Landing'
-import CandidateEntry from './pages/CandidateEntry'
+import InviteEntry from './pages/InviteEntry'
 import ChallengeArena from './pages/ChallengeArena'
 import SessionReport from './pages/SessionReport'
 import RecruiterLogin from './pages/RecruiterLogin'
@@ -11,7 +11,7 @@ import RecruiterSessionDetail from './pages/RecruiterSessionDetail'
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
   const sessionId = localStorage.getItem('sessionId')
-  if (!token || !sessionId) return <Navigate to="/start" replace />
+  if (!token || !sessionId) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -32,7 +32,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/start" element={<CandidateEntry />} />
+        {/* Candidates enter only via their single-use assessment link */}
+        <Route path="/a/:token" element={<InviteEntry />} />
+        <Route path="/start" element={<Navigate to="/" replace />} />
         <Route
           path="/challenge"
           element={

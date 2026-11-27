@@ -7,6 +7,7 @@ import com.assessment.model.CandidateSession;
 import com.assessment.model.Submission;
 import com.assessment.repository.CandidateSessionRepository;
 import com.assessment.repository.SubmissionRepository;
+import com.assessment.service.AssessmentInviteService;
 import com.assessment.service.CodeAnalysisService;
 import com.assessment.service.GitHubActionsService;
 import com.assessment.service.WebSocketService;
@@ -40,6 +41,7 @@ public class SubmissionController {
 
     private final SubmissionRepository submissionRepository;
     private final CandidateSessionRepository sessionRepository;
+    private final AssessmentInviteService inviteService;
     private final CodeAnalysisService codeAnalysisService;
     private final GitHubActionsService gitHubActionsService;
     private final WebSocketService webSocketService;
@@ -63,6 +65,15 @@ public class SubmissionController {
             }
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("message", "Assessment time has expired — submissions are closed."));
+        }
+
+        // A session may only submit challenges on its own assessment link
+        boolean notAssigned = inviteService.allowedChallengeIds(sessionId)
+                .map(ids -> !ids.contains(request.getChallengeId()))
+                .orElse(false);
+        if (notAssigned) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "This challenge is not part of your assessment."));
         }
         log.info("Submission for session={} challenge={}", sessionId, request.getChallengeId());
 

@@ -113,13 +113,26 @@ verify the code still parses and keeps the required structure (returning a high 
 starter fails ≥1 test and the reference fix passes all — validated locally by injecting each into
 `CandidateSubmission.java` and running `mvn test`.
 
-**Recruiter-controlled global challenge selection.** `challenges.active` (added in `V7`, default TRUE)
-is a single global set shared by every candidate — there is no per-candidate assignment. `GET
-/api/challenges` (candidate-facing) returns only `active` challenges via
-`findByActiveTrueOrderByIdAsc`; the recruiter dashboard's "Manage Challenges" modal reads all of them
-via `GET /api/recruiter/challenges` (each flagged `deepVerified`) and replaces the set via
-`PUT /api/recruiter/challenges/active` (rejects an empty selection). Changing the set affects new page
-loads; candidates already mid-assessment keep what they loaded.
+**Candidates only enter through recruiter-issued, single-use assessment links — there is no open
+sign-up.** The recruiter dashboard's "Create Assessment Link" modal (`CreateInviteModal`) posts
+`{title, candidateName, candidateEmail, challengeIds, expiresInDays}` to `POST /api/recruiter/invites`,
+creating an `AssessmentInvite` (`V10`: `assessment_invites` + ordered `assessment_invite_challenges`)
+with a random 24-char token; the shareable URL is `{frontend origin}/a/{token}` (built client-side in
+`inviteUrl`, since the API host is Render but the app is served from Vercel). `InviteEntry` (route
+`/a/:token`) reads the public summary `GET /api/invites/{token}` (title, candidate name, challenge count,
+total time, state `VALID|EXPIRED|USED|REVOKED` — never challenge content), then `POST /api/auth/login
+{inviteToken}` starts the session: name/email come from the invite, the timer is the sum of *that
+invite's* challenge limits, and `AssessmentInviteRepository.claim` flips PENDING→STARTED with a
+conditional UPDATE so a double-click/two-tab race yields exactly one session. Expiry (1–30 days, default
+7) only limits *starting*; once started, the session timer governs. Re-opening a used link in the same
+browser offers "Resume" (keyed on `localStorage.inviteToken`), anywhere else it shows "already used".
+**Challenge access is scoped to the invite**: `GET /api/challenges` returns the invite's challenges in
+the recruiter's order, and `GET /api/challenges/{id}` / `POST /api/submissions` return 403 for any other
+id (`AssessmentInviteService.allowedChallengeIds`). Sessions with no invite (created before V10) fall
+back to the legacy `challenges.active` set — that column is otherwise unused now and the old
+`PUT /api/recruiter/challenges/active` endpoint and "Manage Challenges" modal are gone.
+`frontend/vercel.json` needs its catch-all `index.html` rewrite so `/a/{token}` works as a direct load
+from an email.
 
 **Frontend per-challenge/per-submission state resets are intentionally synchronous, not effect-based.**
 `useWebSocket(sessionId, challengeId)` resets `instantResults`/`deepResults`/`deepStatus` **during
@@ -152,9 +165,9 @@ push an `INSTANT_RESULT` while `deepStatus` stays `'idle'` (deep verification ne
 FALLBACK matches). If you touch these flags, keep IDLE defined as the *complement* of the other three
 (`!isRunning && !deepSucceeded && !isFallback`) rather than re-deriving it from `deepStatus` directly.
 
-**The timer is assessment-level, not per-challenge, and the server owns the deadline.** At login
-`AuthController` freezes `candidate_sessions.time_limit_seconds` (V9) = sum of the *active* challenges'
-`timeLimitSeconds`; `Challenge.timeLimitSeconds` is now only an input to that sum. `GET
+**The timer is assessment-level, not per-challenge, and the server owns the deadline.** When a link is
+used, `AssessmentInviteService.start` freezes `candidate_sessions.time_limit_seconds` (V9) = sum of the
+invite's challenges' `timeLimitSeconds`; `Challenge.timeLimitSeconds` is now only an input to that sum. `GET
 /api/sessions/{id}` returns `remainingSeconds` (a duration, not a timestamp, so server/browser timezone
 and clock skew don't matter); `ChallengeArena` turns it into a local `deadlineMs` for
 `useAssessmentTimer`, so refreshes and tab switches never reset the clock. `SubmissionController` rejects

@@ -1,11 +1,6 @@
 import client from './client'
 import recruiterClient from './recruiterClient'
-import type { LoginResponse, Session, CheatSeverity, CheatEventType } from '../types'
-
-export const startSession = async (name: string, email: string): Promise<LoginResponse> => {
-  const res = await client.post<LoginResponse>('/api/auth/login', { name, email })
-  return res.data
-}
+import type { Session, CheatSeverity, CheatEventType } from '../types'
 
 export const completeSession = async (sessionId: string): Promise<Session> => {
   const res = await client.post<Session>(`/api/sessions/${sessionId}/complete`)

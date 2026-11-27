@@ -7,6 +7,10 @@
     {
       "source": "/ws/:path*",
       "destination": "https://tech-interviewer.onrender.com/ws/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

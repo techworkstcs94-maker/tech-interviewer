@@ -92,6 +92,8 @@ export interface SessionSummary {
   sessionId: string
   candidateName: string
   candidateEmail: string
+  /** Title of the assessment link the session was started from ('' for legacy sessions) */
+  assessmentTitle?: string
   startTime: string
   endTime: string
   status: string

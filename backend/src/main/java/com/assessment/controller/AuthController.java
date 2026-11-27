@@ -4,54 +4,43 @@ import com.assessment.dto.LoginRequest;
 import com.assessment.dto.LoginResponse;
 import com.assessment.dto.RecruiterLoginRequest;
 import com.assessment.model.CandidateSession;
-import com.assessment.model.Challenge;
-import com.assessment.repository.CandidateSessionRepository;
-import com.assessment.repository.ChallengeRepository;
 import com.assessment.security.JwtUtil;
+import com.assessment.service.AssessmentInviteService;
+import com.assessment.service.AssessmentInviteService.InviteException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final CandidateSessionRepository sessionRepository;
-    private final ChallengeRepository challengeRepository;
+    private final AssessmentInviteService inviteService;
     private final JwtUtil jwtUtil;
 
+    /**
+     * Candidates can only start via a recruiter-issued, single-use assessment link. The invite
+     * supplies the name/email and challenge set; the session timer = sum of those challenges' limits.
+     */
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        String sessionId = UUID.randomUUID().toString();
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        CandidateSession session;
+        try {
+            session = inviteService.start(request.getInviteToken());
+        } catch (InviteException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("message", e.getMessage()));
+        }
 
-        CandidateSession session = new CandidateSession();
-        session.setSessionId(sessionId);
-        session.setCandidateName(request.getName());
-        session.setCandidateEmail(request.getEmail());
-        session.setStartTime(LocalDateTime.now());
-        session.setStatus(CandidateSession.SessionStatus.ACTIVE);
-        // Assessment-level timer: one budget for the whole session = sum of the active challenges'
-        // limits, frozen now so recruiter changes to the active set don't move this candidate's deadline.
-        int totalLimit = challengeRepository.findByActiveTrueOrderByIdAsc().stream()
-                .map(Challenge::getTimeLimitSeconds)
-                .filter(java.util.Objects::nonNull)
-                .mapToInt(Integer::intValue)
-                .sum();
-        session.setTimeLimitSeconds(totalLimit > 0 ? totalLimit : null);
-        sessionRepository.save(session);
-
-        String token = jwtUtil.generateToken(sessionId, Map.of(
+        String token = jwtUtil.generateToken(session.getSessionId(), Map.of(
                 "role", "CANDIDATE",
-                "name", request.getName(),
-                "email", request.getEmail()
+                "name", session.getCandidateName(),
+                "email", session.getCandidateEmail()
         ));
 
-        return ResponseEntity.ok(new LoginResponse(sessionId, token, request.getName()));
+        return ResponseEntity.ok(new LoginResponse(session.getSessionId(), token, session.getCandidateName()));
     }
 
     @PostMapping("/recruiter")

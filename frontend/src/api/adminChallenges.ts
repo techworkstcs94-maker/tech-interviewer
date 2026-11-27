@@ -5,16 +5,12 @@ export interface AdminChallenge {
   title: string
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   category: string
-  active: boolean
+  timeLimitSeconds: number
   deepVerified: boolean
 }
 
+/** Full challenge catalogue for the "Create Assessment Link" picker. */
 export const getAdminChallenges = async (): Promise<AdminChallenge[]> => {
   const res = await recruiterClient.get<AdminChallenge[]>('/api/recruiter/challenges')
   return res.data
-}
-
-export const setActiveChallenges = async (activeIds: number[]): Promise<number[]> => {
-  const res = await recruiterClient.put<{ activeIds: number[] }>('/api/recruiter/challenges/active', { activeIds })
-  return res.data.activeIds
 }

@@ -22,7 +22,8 @@ client.interceptors.response.use(
       localStorage.removeItem('token')
       localStorage.removeItem('sessionId')
       localStorage.removeItem('candidateName')
-      window.location.href = '/start'
+      // Candidates can only (re)enter through their assessment link, so send them home
+      window.location.href = '/'
     }
     return Promise.reject(err)
   }

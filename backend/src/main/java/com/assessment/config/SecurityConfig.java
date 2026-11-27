@@ -3,6 +3,7 @@ package com.assessment.config;
 import com.assessment.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -36,10 +37,12 @@ public class SecurityConfig {
                         "/*.js", "/*.css", "/*.ico", "/*.png", "/*.svg",
                         "/*.map", "/*.woff", "/*.woff2", "/*.txt").permitAll()
                 // SPA routes — served by SpaController → index.html
-                .requestMatchers("/start", "/challenge", "/report",
+                .requestMatchers("/start", "/challenge", "/report", "/a/**",
                         "/recruiter", "/recruiter/**").permitAll()
                 // Public API endpoints
                 .requestMatchers("/api/auth/**").permitAll()
+                // Public summary of an assessment link (title, candidate name, challenge count, validity)
+                .requestMatchers(HttpMethod.GET, "/api/invites/*").permitAll()
                 .requestMatchers("/api/health", "/api/ping").permitAll()
                 .requestMatchers("/api/webhook/**").permitAll()
                 .requestMatchers("/api/submissions/status").permitAll()

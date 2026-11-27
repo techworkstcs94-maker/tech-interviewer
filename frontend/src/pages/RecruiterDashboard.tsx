@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { getRecruiterSessions, deleteRecruiterSession } from '../api/sessions'
 import { cheatRiskLabel, cheatRiskColor, cheatRiskBg } from '../lib/cheatConstants'
-import ManageChallengesModal from '../components/ManageChallengesModal'
+import CreateInviteModal from '../components/CreateInviteModal'
+import InvitesPanel from '../components/InvitesPanel'
+import { listInvites, type RecruiterInvite } from '../api/invites'
 import type { SessionSummary } from '../types'
 
 export default function RecruiterDashboard() {
@@ -14,7 +16,8 @@ export default function RecruiterDashboard() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<keyof SessionSummary>('startTime')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [manageOpen, setManageOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [invites, setInvites] = useState<RecruiterInvite[]>([])
 
   useEffect(() => {
     const token = localStorage.getItem('recruiterToken')
@@ -22,9 +25,14 @@ export default function RecruiterDashboard() {
     load()
   }, [navigate])
 
+  const loadInvites = () => {
+    listInvites().then(setInvites).catch(() => { /* auth redirect / transient — sessions error covers it */ })
+  }
+
   const load = () => {
     setLoading(true)
     setError('')
+    loadInvites()
     getRecruiterSessions()
       .then(setSessions)
       .catch((err) => {
@@ -48,10 +56,11 @@ export default function RecruiterDashboard() {
   }
 
   const handleExportCSV = () => {
-    const headers = ['Name', 'Email', 'Status', 'Started', 'Submissions', 'Instant Score', 'Deep Score', 'Cheat Score']
+    const headers = ['Name', 'Email', 'Assessment', 'Status', 'Started', 'Submissions', 'Instant Score', 'Deep Score', 'Cheat Score']
     const rows = sessions.map(s => [
       s.candidateName,
       s.candidateEmail,
+      s.assessmentTitle ?? '',
       s.status,
       s.startTime ? new Date(s.startTime).toLocaleString() : '',
       s.submissionCount,
@@ -169,7 +178,7 @@ export default function RecruiterDashboard() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
-              onClick={() => setManageOpen(true)}
+              onClick={() => setCreateOpen(true)}
               style={{
                 background: 'var(--accent)', border: 'none',
                 borderRadius: '8px', color: 'var(--on-accent)',
@@ -177,7 +186,7 @@ export default function RecruiterDashboard() {
                 fontSize: '0.85rem', fontFamily: 'var(--font-ui)', fontWeight: 700,
               }}
             >
-              ⚙ Manage Challenges
+              + Create Assessment Link
             </button>
             {sessions.length > 0 && (
               <span style={{
@@ -267,6 +276,10 @@ export default function RecruiterDashboard() {
           </div>
         )}
 
+        {!loading && (
+          <InvitesPanel invites={invites} onChanged={loadInvites} onCreate={() => setCreateOpen(true)} />
+        )}
+
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
             <svg style={{ animation: 'spin 1s linear infinite' }} width="36" height="36" viewBox="0 0 24 24" fill="none">
@@ -278,7 +291,7 @@ export default function RecruiterDashboard() {
           <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📭</div>
             <p style={{ fontSize: '1rem' }}>No candidate sessions yet.</p>
-            <p style={{ fontSize: '0.85rem', marginTop: '6px' }}>Share the assessment link to get started.</p>
+            <p style={{ fontSize: '0.85rem', marginTop: '6px' }}>Create an assessment link above and share it with a candidate.</p>
           </div>
         ) : (
           <>
@@ -346,6 +359,7 @@ export default function RecruiterDashboard() {
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       <SortTh label="Candidate" k="candidateName" />
                       <th style={{ padding: '12px 16px', textAlign: 'left', fontFamily: 'var(--font-code)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Email</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontFamily: 'var(--font-code)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Assessment</th>
                       <SortTh label="Started" k="startTime" />
                       <SortTh label="Status" k="status" />
                       <SortTh label="Submissions" k="submissionCount" />
@@ -372,6 +386,9 @@ export default function RecruiterDashboard() {
                           </td>
                           <td style={{ padding: '14px 16px', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: '0.8rem' }}>
                             {s.candidateEmail}
+                          </td>
+                          <td style={{ padding: '14px 16px', color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)', fontSize: '0.8rem' }}>
+                            {s.assessmentTitle || '—'}
                           </td>
                           <td style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.78rem', fontFamily: 'var(--font-code)' }}>
                             {s.startTime ? new Date(s.startTime).toLocaleString() : '—'}
@@ -447,7 +464,7 @@ export default function RecruiterDashboard() {
         )}
       </main>
 
-      <ManageChallengesModal open={manageOpen} onClose={() => setManageOpen(false)} />
+      <CreateInviteModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={loadInvites} />
     </div>
   )
 }
