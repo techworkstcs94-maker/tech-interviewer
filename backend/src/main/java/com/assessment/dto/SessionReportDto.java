@@ -23,4 +23,12 @@ public class SessionReportDto {
     private double averageDeepScore;
     private List<CheatEvent> cheatEvents;
     private int cheatScore;
+    /** Total assessment time budget in seconds; null when the session has no limit. */
+    private Integer timeLimitSeconds;
+    /**
+     * Seconds left until the deadline, computed server-side at response time; null when unlimited.
+     * Sent as a duration rather than an absolute timestamp so the client's countdown is immune to
+     * server/browser timezone differences and clock skew.
+     */
+    private Long remainingSeconds;
 }

@@ -40,8 +40,16 @@ public class SessionController {
     public ResponseEntity<SessionReportDto> completeSession(@PathVariable String sessionId) {
         return sessionRepository.findBySessionId(sessionId)
                 .map(session -> {
-                    session.setEndTime(LocalDateTime.now());
-                    session.setStatus(CandidateSession.SessionStatus.COMPLETED);
+                    LocalDateTime now = LocalDateTime.now();
+                    // Idempotent: a repeat call (e.g. auto-finish racing a manual click) keeps the first outcome.
+                    if (session.getStatus() == CandidateSession.SessionStatus.ACTIVE) {
+                        session.setEndTime(now);
+                        // Finishing after the assessment deadline (normally the frontend's auto-finish
+                        // when the timer hits 0) is recorded as EXPIRED so recruiters can tell it apart.
+                        session.setStatus(session.isPastDeadline(now, 0)
+                                ? CandidateSession.SessionStatus.EXPIRED
+                                : CandidateSession.SessionStatus.COMPLETED);
+                    }
                     sessionRepository.save(session);
                     List<Submission> subs = submissionRepository.findBySessionIdOrderByChallengeIdAsc(sessionId);
                     List<CheatEvent> events = cheatEventRepository.findBySessionIdOrderByOccurredAtAsc(sessionId);
@@ -81,7 +89,8 @@ public class SessionController {
                 session.getSessionId(), session.getCandidateName(), session.getCandidateEmail(),
                 session.getStartTime(), session.getEndTime(), session.getStatus().name(),
                 submissions, avgInstant.orElse(0), avgDeep.orElse(0),
-                cheatEvents, cheatScore
+                cheatEvents, cheatScore,
+                session.getTimeLimitSeconds(), session.remainingSeconds(LocalDateTime.now())
         );
     }
 

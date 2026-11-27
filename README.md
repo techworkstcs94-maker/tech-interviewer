@@ -349,7 +349,8 @@ CREATE TABLE challenges (
 CREATE TABLE candidate_sessions (
     id VARCHAR(36) PRIMARY KEY,  -- UUID
     candidate_name VARCHAR(255), candidate_email VARCHAR(255),
-    status VARCHAR(50),          -- ACTIVE / COMPLETED
+    status VARCHAR(50),          -- ACTIVE / COMPLETED / EXPIRED
+    time_limit_seconds INTEGER,  -- V9: assessment-level budget = sum of active challenge limits at login
     started_at TIMESTAMP, completed_at TIMESTAMP
 );
 
@@ -621,11 +622,11 @@ JavaMsaInterviewer/
 │       │   ├── CodeEditor.tsx          # Monaco Editor wrapper
 │       │   ├── TestResults.tsx         # Unified instant + deep results panel
 │       │   ├── AnalysisLog.tsx         # WebSocket event log
-│       │   ├── Timer.tsx               # Per-challenge countdown
+│       │   ├── Timer.tsx               # Assessment-level countdown (header)
 │       │   └── HintsDrawer.tsx         # Slide-out hints panel
 │       ├── hooks/
 │       │   ├── useWebSocket.ts         # STOMP subscription + state dispatch
-│       │   ├── useTimer.ts             # Countdown with pause/resume
+│       │   ├── useTimer.ts             # useAssessmentTimer: countdown to server deadline
 │       │   └── useSnapshots.ts         # Session-scoped localStorage
 │       ├── api/
 │       │   ├── challenges.ts

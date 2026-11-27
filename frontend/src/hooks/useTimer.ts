@@ -1,57 +1,43 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
-interface UseTimerReturn {
-  elapsed: number
-  remaining: number
-  isRunning: boolean
-  start: () => void
-  pause: () => void
-  resume: () => void
-  reset: () => void
+interface UseAssessmentTimerReturn {
+  /** Whole seconds left, or null while the deadline is not known yet. */
+  remaining: number | null
+  expired: boolean
 }
 
-export function useTimer(limitSeconds: number, onExpire?: () => void): UseTimerReturn {
-  const [elapsed, setElapsed] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+/**
+ * Assessment-level countdown to an absolute deadline (epoch ms in the browser's clock).
+ *
+ * Derived from the deadline on every tick rather than incrementing a counter, so it doesn't drift,
+ * isn't affected by challenge switches, and picks up where it left off after a page refresh (the
+ * deadline is re-fetched from the server). `onExpire` fires exactly once per deadline — immediately
+ * if the deadline has already passed when it becomes known.
+ */
+export function useAssessmentTimer(deadlineMs: number | null, onExpire?: () => void): UseAssessmentTimerReturn {
+  const [now, setNow] = useState(() => Date.now())
   const onExpireRef = useRef(onExpire)
+  const firedRef = useRef(false)
 
   useEffect(() => { onExpireRef.current = onExpire }, [onExpire])
 
-  const start = useCallback(() => {
-    setElapsed(0)
-    setIsRunning(true)
-  }, [])
-
-  const pause = useCallback(() => setIsRunning(false), [])
-  const resume = useCallback(() => setIsRunning(true), [])
-  const reset = useCallback(() => { setIsRunning(false); setElapsed(0) }, [])
-
   useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setElapsed(e => {
-          if (e >= limitSeconds) {
-            setIsRunning(false)
-            setTimeout(() => onExpireRef.current?.(), 0)
-            return e
-          }
-          return e + 1
-        })
-      }, 1000)
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+    if (deadlineMs === null) return
+    firedRef.current = false
+    const tick = () => {
+      const t = Date.now()
+      setNow(t)
+      if (t >= deadlineMs && !firedRef.current) {
+        firedRef.current = true
+        onExpireRef.current?.()
+      }
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [isRunning, limitSeconds])
+    tick()
+    // 500ms so the displayed second never lags by almost a full second
+    const id = setInterval(tick, 500)
+    return () => clearInterval(id)
+  }, [deadlineMs])
 
-  return {
-    elapsed,
-    remaining: Math.max(0, limitSeconds - elapsed),
-    isRunning,
-    start,
-    pause,
-    resume,
-    reset,
-  }
+  const remaining = deadlineMs === null ? null : Math.max(0, Math.ceil((deadlineMs - now) / 1000))
+  return { remaining, expired: remaining === 0 }
 }

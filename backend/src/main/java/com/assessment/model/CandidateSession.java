@@ -35,6 +35,29 @@ public class CandidateSession {
     @Enumerated(EnumType.STRING)
     private SessionStatus status = SessionStatus.ACTIVE;
 
+    /** Total assessment time budget, fixed at login. Null = no limit (pre-V9 sessions). */
+    @Column(name = "time_limit_seconds")
+    private Integer timeLimitSeconds;
+
+    /** startTime + timeLimitSeconds, or null when the session has no time limit. */
+    public LocalDateTime deadline() {
+        if (startTime == null || timeLimitSeconds == null) return null;
+        return startTime.plusSeconds(timeLimitSeconds);
+    }
+
+    /** Seconds left until the deadline (never negative), or null when the session has no time limit. */
+    public Long remainingSeconds(LocalDateTime now) {
+        LocalDateTime deadline = deadline();
+        if (deadline == null) return null;
+        return Math.max(0, java.time.Duration.between(now, deadline).getSeconds());
+    }
+
+    /** True once {@code now} is more than {@code graceSeconds} past the deadline. */
+    public boolean isPastDeadline(LocalDateTime now, long graceSeconds) {
+        LocalDateTime deadline = deadline();
+        return deadline != null && now.isAfter(deadline.plusSeconds(graceSeconds));
+    }
+
     public enum SessionStatus {
         ACTIVE, COMPLETED, EXPIRED
     }

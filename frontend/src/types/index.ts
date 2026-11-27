@@ -82,6 +82,10 @@ export interface Session {
   averageDeepScore: number
   cheatEvents?: CheatEvent[]
   cheatScore?: number
+  /** Total assessment time budget (sum of active challenge limits at login); null = unlimited */
+  timeLimitSeconds?: number | null
+  /** Seconds left until the assessment deadline, computed server-side; null = unlimited */
+  remainingSeconds?: number | null
 }
 
 export interface SessionSummary {

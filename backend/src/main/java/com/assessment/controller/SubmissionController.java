@@ -3,7 +3,9 @@ package com.assessment.controller;
 import com.assessment.dto.AnalysisResult;
 import com.assessment.dto.SubmissionRequest;
 import com.assessment.dto.SubmissionResponse;
+import com.assessment.model.CandidateSession;
 import com.assessment.model.Submission;
+import com.assessment.repository.CandidateSessionRepository;
 import com.assessment.repository.SubmissionRepository;
 import com.assessment.service.CodeAnalysisService;
 import com.assessment.service.GitHubActionsService;
@@ -12,10 +14,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,18 +33,37 @@ public class SubmissionController {
     // GitHub Actions run — report the AST result immediately instead of spending CI time on it.
     private static final int AST_GATE_THRESHOLD = 70;
 
+    // Submissions are accepted for this long after the assessment deadline. The frontend
+    // auto-submits every attempted challenge the moment the timer hits 0, so this only needs to
+    // cover that burst plus network latency/clock drift — not give the candidate extra time.
+    private static final long DEADLINE_GRACE_SECONDS = 60;
+
     private final SubmissionRepository submissionRepository;
+    private final CandidateSessionRepository sessionRepository;
     private final CodeAnalysisService codeAnalysisService;
     private final GitHubActionsService gitHubActionsService;
     private final WebSocketService webSocketService;
     private final ObjectMapper objectMapper;
 
     @PostMapping
-    public ResponseEntity<SubmissionResponse> submit(
+    public ResponseEntity<?> submit(
             @RequestBody SubmissionRequest request,
             Authentication authentication) {
 
         String sessionId = authentication.getName();
+
+        // Assessment-level deadline is enforced server-side; the browser countdown is advisory.
+        CandidateSession session = sessionRepository.findBySessionId(sessionId).orElse(null);
+        if (session != null && session.isPastDeadline(LocalDateTime.now(), DEADLINE_GRACE_SECONDS)) {
+            log.info("Rejecting submission after deadline: session={} challenge={}", sessionId, request.getChallengeId());
+            if (session.getStatus() == CandidateSession.SessionStatus.ACTIVE) {
+                session.setStatus(CandidateSession.SessionStatus.EXPIRED);
+                if (session.getEndTime() == null) session.setEndTime(session.deadline());
+                sessionRepository.save(session);
+            }
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Assessment time has expired — submissions are closed."));
+        }
         log.info("Submission for session={} challenge={}", sessionId, request.getChallengeId());
 
         Submission submission = new Submission();

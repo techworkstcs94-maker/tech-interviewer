@@ -152,6 +152,19 @@ push an `INSTANT_RESULT` while `deepStatus` stays `'idle'` (deep verification ne
 FALLBACK matches). If you touch these flags, keep IDLE defined as the *complement* of the other three
 (`!isRunning && !deepSucceeded && !isFallback`) rather than re-deriving it from `deepStatus` directly.
 
+**The timer is assessment-level, not per-challenge, and the server owns the deadline.** At login
+`AuthController` freezes `candidate_sessions.time_limit_seconds` (V9) = sum of the *active* challenges'
+`timeLimitSeconds`; `Challenge.timeLimitSeconds` is now only an input to that sum. `GET
+/api/sessions/{id}` returns `remainingSeconds` (a duration, not a timestamp, so server/browser timezone
+and clock skew don't matter); `ChallengeArena` turns it into a local `deadlineMs` for
+`useAssessmentTimer`, so refreshes and tab switches never reset the clock. `SubmissionController` rejects
+submissions (403) more than `DEADLINE_GRACE_SECONDS` (60) past the deadline and marks the session
+`EXPIRED`; `completeSession` also records `EXPIRED` when finishing after the deadline. At 0 the frontend
+locks the editor, auto-submits every challenge that is not passed, differs from its starter code, and
+differs from its last submitted code, then calls `handleFinish` — the grace window exists only to cover
+that burst. Code is saved to `localStorage` on every challenge switch (cleanup of the effect keyed on
+the active challenge id), and `elapsedSeconds` on a submission is per-challenge time-on-task.
+
 **Editor autocomplete is a curated snippet library, not a language server.** Monaco has no semantic
 understanding of the Spring classpath. `frontend/src/lib/javaCompletions.ts` registers a
 `monaco.languages.registerCompletionItemProvider('java', ...)` with snippets scoped to exactly what

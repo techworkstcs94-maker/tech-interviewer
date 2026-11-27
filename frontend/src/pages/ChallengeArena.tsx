@@ -7,9 +7,9 @@ import HintsDrawer from '../components/HintsDrawer'
 import AntiCheatBanner from '../components/AntiCheatBanner'
 import { getChallenges } from '../api/challenges'
 import { submitCode } from '../api/submissions'
-import { completeSession, reportCheatEvent } from '../api/sessions'
+import { completeSession, getSessionReport, reportCheatEvent } from '../api/sessions'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { useTimer } from '../hooks/useTimer'
+import { useAssessmentTimer } from '../hooks/useTimer'
 import { useSnapshots } from '../hooks/useSnapshots'
 import { AntiCheatMonitor } from '../lib/antiCheat'
 import type { Challenge, TestCase, CheatEventType, CheatSeverity } from '../types'
@@ -33,7 +33,10 @@ export default function ChallengeArena() {
   const [verifying, setVerifying] = useState(false)
   const [submitted, setSubmitted] = useState<Set<number>>(new Set())
   const [passed, setPassed] = useState<Set<number>>(new Set())
-  const [timedOut, setTimedOut] = useState<Set<number>>(new Set())
+  // Assessment-level timer: one deadline for the whole session (from the server), not per challenge
+  const [deadlineMs, setDeadlineMs] = useState<number | null>(null)
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(0)
+  const [timeUp, setTimeUp] = useState(false)
   const [submissionCounts, setSubmissionCounts] = useState<Record<number, number>>({})
   const [hintsOpen, setHintsOpen] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -43,6 +46,13 @@ export default function ChallengeArena() {
 
   const monitorRef = useRef<AntiCheatMonitor | null>(null)
   const autoAdvancedChallenges = useRef<Set<number>>(new Set())
+  const finishingRef = useRef(false)
+  const fiveMinWarnedRef = useRef(false)
+  // Last code sent for each challenge — auto-submit at the deadline skips anything already scored
+  const lastSubmittedCode = useRef<Record<number, string>>({})
+  // Per-challenge time-on-task (seconds accumulated while the challenge was the active tab)
+  const challengeSeconds = useRef<Record<number, number>>({})
+  const activeSince = useRef<number>(Date.now())
 
   const activeChallenge = challenges[activeIdx]
   const { instantResults, deepResults, deepStatus, resetForNewSubmission } = useWebSocket(sessionId, activeChallenge?.id ?? null)
@@ -93,25 +103,65 @@ export default function ChallengeArena() {
   }, [activeChallenge?.testCasesJson])
   const { save, load } = useSnapshots(sessionId)
 
-  // Capture activeChallenge in a ref so the timer expiry callback always sees latest value
-  const activeChallengeRef = useRef(activeChallenge)
-  useEffect(() => { activeChallengeRef.current = activeChallenge }, [activeChallenge])
+  // Latest state for async callbacks (deadline auto-submit runs across several renders)
+  const latest = useRef({ challenges, codes, passed, hintRevealed })
+  latest.current = { challenges, codes, passed, hintRevealed }
 
-  const handleTimerExpire = useCallback(() => {
-    const challenge = activeChallengeRef.current
-    if (!challenge) return
-    setTimedOut(prev => new Set([...prev, challenge.id]))
-    setWarningMessage(`Time's up for "${challenge.title}" — this challenge has been marked as failed.`)
-  }, [])
+  const activeChallengeId = activeChallenge?.id
+  const challengeElapsed = (id: number) =>
+    Math.round((challengeSeconds.current[id] ?? 0) +
+      (id === activeChallengeId ? (Date.now() - activeSince.current) / 1000 : 0))
 
-  const timer = useTimer(activeChallenge?.timeLimitSeconds ?? 600, handleTimerExpire)
-
-  // Auto-start timer when challenges first load and whenever the active challenge changes
-  const timerStart = timer.start
+  // On every challenge switch: persist the code of the challenge being left, and bank its time-on-task.
+  // The cleanup closes over the *outgoing* challenge id, so it saves exactly the one being left.
   useEffect(() => {
-    if (challenges.length === 0) return
-    timerStart()
-  }, [activeIdx, challenges.length, timerStart])
+    if (activeChallengeId === undefined) return
+    activeSince.current = Date.now()
+    return () => {
+      const code = latest.current.codes[activeChallengeId]
+      if (code !== undefined) save(activeChallengeId, code)
+      challengeSeconds.current[activeChallengeId] =
+        (challengeSeconds.current[activeChallengeId] ?? 0) + (Date.now() - activeSince.current) / 1000
+    }
+  }, [activeChallengeId, save])
+
+  // Deadline reached: lock the arena, submit every attempted-but-unscored challenge, then finish.
+  const handleTimeUp = async () => {
+    if (finishingRef.current) return
+    setTimeUp(true)
+    setWarningMessage("Time's up — your work is being submitted automatically.")
+    const { challenges: cs, codes: cur, passed: done, hintRevealed: hints } = latest.current
+    for (const c of cs) {
+      const code = cur[c.id] ?? ''
+      if (done.has(c.id)) continue                                   // already passed
+      if (!code.trim() || code === (c.starterCode ?? '')) continue    // never attempted
+      if (lastSubmittedCode.current[c.id] === code) continue         // this exact code already scored
+      save(c.id, code)
+      lastSubmittedCode.current[c.id] = code
+      try {
+        await submitCode({
+          challengeId: c.id,
+          code,
+          elapsedSeconds: challengeElapsed(c.id),
+          hintsUsed: hints[c.id]?.size ?? 0,
+        })
+      } catch {
+        // Best effort — a failure here (e.g. past the server's grace window) must not block finishing
+      }
+    }
+    await handleFinish()
+  }
+
+  const timer = useAssessmentTimer(deadlineMs, handleTimeUp)
+
+  // One-time heads-up when 5 minutes remain
+  useEffect(() => {
+    if (timer.remaining === null || fiveMinWarnedRef.current) return
+    if (timer.remaining > 0 && timer.remaining <= 300 && timeLimitSeconds > 300) {
+      fiveMinWarnedRef.current = true
+      setWarningMessage('5 minutes left — all attempted challenges will be submitted automatically when time runs out.')
+    }
+  }, [timer.remaining, timeLimitSeconds])
 
   // ── Session guard: block back-navigation while in assessment ────────────
   useEffect(() => {
@@ -178,16 +228,22 @@ export default function ChallengeArena() {
   // ── Load challenges ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionId) return
-    getChallenges().then(cs => {
+    Promise.all([getChallenges(), getSessionReport(sessionId).catch(() => null)]).then(([cs, session]) => {
       setChallenges(cs)
       const initial: Record<number, string> = {}
       cs.forEach(c => { initial[c.id] = load(c.id) ?? c.starterCode ?? '' })
       setCodes(initial)
+      // Server-side remaining time survives refreshes and is the authority (submissions are rejected
+      // after the deadline). Fallback to the sum of challenge limits only if the session can't be read.
+      const fallback = cs.reduce((sum, c) => sum + (c.timeLimitSeconds ?? 0), 0)
+      const remaining = session?.remainingSeconds ?? fallback
+      setTimeLimitSeconds(session?.timeLimitSeconds ?? fallback)
+      setDeadlineMs(Date.now() + remaining * 1000)
     })
   }, [sessionId, load])
 
   const handleSubmit = async () => {
-    if (!activeChallenge || submitting || verifying || passed.has(activeChallenge.id)) return
+    if (!activeChallenge || timeUp || submitting || verifying || passed.has(activeChallenge.id)) return
     resetForNewSubmission()
     setSubmitting(true)
     setVerifying(true)
@@ -197,11 +253,12 @@ export default function ChallengeArena() {
     monitorRef.current?.logMultipleSubmissions(activeChallenge.id, newCount)
     try {
       save(activeChallenge.id, codes[activeChallenge.id] ?? '')
+      lastSubmittedCode.current[activeChallenge.id] = codes[activeChallenge.id] ?? ''
       const hintsUsed = hintRevealed[activeChallenge.id]?.size ?? 0
       await submitCode({
         challengeId: activeChallenge.id,
         code: codes[activeChallenge.id] ?? '',
-        elapsedSeconds: timer.elapsed,
+        elapsedSeconds: challengeElapsed(activeChallenge.id),
         hintsUsed,
       })
       setSubmitted(prev => new Set([...prev, activeChallenge.id]))
@@ -214,7 +271,9 @@ export default function ChallengeArena() {
   }
 
   const handleFinish = async () => {
-    if (!sessionId) return
+    if (!sessionId || finishingRef.current) return
+    finishingRef.current = true
+    if (activeChallenge) save(activeChallenge.id, latest.current.codes[activeChallenge.id] ?? '')
     monitorRef.current?.finish()
     try { await completeSession(sessionId) } catch {}
     localStorage.setItem('completedSessionId', sessionId)
@@ -276,6 +335,25 @@ export default function ChallengeArena() {
         </div>
       )}
 
+      {/* Time's up overlay — shown while the deadline auto-submit + finish runs */}
+      {timeUp && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 3100,
+          background: 'rgba(10,14,26,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div className="flex flex-col items-center gap-4 text-center px-10 py-8 rounded-xl bg-[var(--surface)] border border-[var(--border)] max-w-md">
+            <div className="orbitron text-xl font-bold text-[var(--red)]">Time's up</div>
+            <p className="text-sm text-[var(--muted)] leading-relaxed">
+              The assessment time limit has been reached. Your attempted challenges are being
+              submitted automatically and you'll be taken to your report.
+            </p>
+            <div className="animate-spin w-6 h-6 border-2 border-[var(--blue)] border-t-transparent rounded-full" />
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="h-14 flex items-center px-4 gap-4 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 z-20">
         <div className="orbitron text-sm font-bold text-white shrink-0">
@@ -313,9 +391,6 @@ export default function ChallengeArena() {
                   </span>
                 )}
                 {submitted.has(c.id) && !isPassed && <span className="text-[var(--green)]">✓</span>}
-                {timedOut.has(c.id) && !submitted.has(c.id) && (
-                  <span className="text-[var(--red)]" title="Timed out">✗</span>
-                )}
               </button>
             )
           })}
@@ -330,6 +405,9 @@ export default function ChallengeArena() {
               border: '1px solid rgba(255,180,171,0.3)',
               fontFamily: 'var(--font-code)', letterSpacing: '0.04em',
             }}>⚠ FLAGGED</span>
+          )}
+          {timer.remaining !== null && (
+            <Timer remaining={timer.remaining} limitSeconds={timeLimitSeconds} />
           )}
           <span className="text-xs text-[var(--muted)] hidden sm:inline">{candidateName}</span>
           <button
@@ -352,7 +430,7 @@ export default function ChallengeArena() {
               onSubmit={handleSubmit}
               lineCount={lineCount}
               onLineCountChange={setLineCount}
-              readOnly={passed.has(activeChallenge.id)}
+              readOnly={timeUp || passed.has(activeChallenge.id)}
             />
           </div>
           <div className="h-10 flex items-center justify-between px-3 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
@@ -369,7 +447,7 @@ export default function ChallengeArena() {
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={submitting || verifying}
+                disabled={timeUp || submitting || verifying}
                 className="flex items-center gap-1.5 px-3 py-1 text-xs bg-[var(--blue)] hover:bg-blue-500 disabled:opacity-50 text-white rounded transition-colors"
               >
                 {submitting || verifying ? (
@@ -395,11 +473,6 @@ export default function ChallengeArena() {
                     {activeChallenge.difficulty}
                   </span>
                   <span className="text-[10px] text-[var(--muted)]">{activeChallenge.category}</span>
-                  {timedOut.has(activeChallenge.id) && !submitted.has(activeChallenge.id) && (
-                    <span className="text-[10px] text-[var(--red)] bg-red-900/15 border border-red-800/25 px-1.5 py-0.5 rounded">
-                      Timed out
-                    </span>
-                  )}
                 </div>
               </div>
               <button
@@ -432,13 +505,6 @@ export default function ChallengeArena() {
                   {activeChallenge.description}
                 </pre>
               </div>
-            </div>
-
-            <div className="px-4 pb-3">
-              <Timer
-                remaining={timer.remaining}
-                limitSeconds={activeChallenge.timeLimitSeconds}
-              />
             </div>
           </div>
 

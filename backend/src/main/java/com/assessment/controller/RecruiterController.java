@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,7 +125,8 @@ public class RecruiterController {
                             session.getSessionId(), session.getCandidateName(), session.getCandidateEmail(),
                             session.getStartTime(), session.getEndTime(), session.getStatus().name(),
                             subs, avgInstant.orElse(0), avgDeep.orElse(0),
-                            events, cheatScore
+                            events, cheatScore,
+                            session.getTimeLimitSeconds(), session.remainingSeconds(LocalDateTime.now())
                     ));
                 })
                 .orElse(ResponseEntity.notFound().build());
