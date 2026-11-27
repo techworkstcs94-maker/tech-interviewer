@@ -1,149 +1,231 @@
 import React from 'react'
 
 /**
- * Public home page. Candidates no longer self-register here — they start only through the
- * single-use assessment link (/a/:token) their recruiter sends them.
+ * Public home page. Informational only — candidates start through the single-use assessment link
+ * (/a/:token) their recruiter sends them; recruiters go to /recruiter directly.
  */
+
+const STACK = ['Java 17', 'Spring Boot 3.2', 'Microservices', 'REST APIs']
+const INSIDE = ['Spring Boot 3.2', 'Java 17', 'JavaParser AST', 'JPA / Hibernate', 'JWT Security', 'WebClient']
+const FEATURES = [
+  { icon: '⌘', title: 'Real-world engineering', body: 'Explore backend patterns and practical Java development concepts.' },
+  { icon: '⌁', title: 'Code-level insight', body: 'JavaParser AST analysis and structured technical evaluation.' },
+  { icon: '◈', title: 'Security in focus', body: 'Discover API security concepts, JWT, and robust application design.' },
+]
+
+// Scoped styles: layout breakpoints + hover states that inline styles can't express
+const css = `
+.lp-wrap { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+.lp-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; }
+.lp-invite { display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px; align-items: center; }
+.lp-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.lp-card { transition: border-color .2s, transform .2s; }
+.lp-card:hover { border-color: rgba(164,230,255,0.35) !important; transform: translateY(-2px); }
+.lp-chip:hover { border-color: var(--accent) !important; }
+@media (max-width: 900px) {
+  .lp-hero, .lp-invite { grid-template-columns: 1fr; }
+  .lp-features { grid-template-columns: 1fr; }
+  .lp-h1 { font-size: 2.6rem !important; }
+}
+@media (max-width: 520px) {
+  .lp-wrap { padding: 0 16px; }
+  .lp-h1 { font-size: 2.1rem !important; }
+  .lp-pad { padding: 24px !important; }
+}
+`
+
 export default function Landing() {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+      <style>{css}</style>
 
-      {/* ── Top Nav ──────────────────────────────────────────────────────── */}
-      <header style={{
-        position: 'fixed', top: 0, width: '100%', zIndex: 50,
-        background: 'var(--bg-base)',
-        borderBottom: '1px solid var(--border)',
-        height: '64px',
-      }}>
-        <div style={{
-          maxWidth: '1440px', margin: '0 auto',
-          padding: '0 32px', height: '100%',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: 32, height: 32, flexShrink: 0,
-              background: 'var(--accent)',
-              borderRadius: '6px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 800, fontSize: '0.8rem', color: 'var(--on-accent)',
-              fontFamily: 'var(--font-ui)',
-            }}>JM</div>
-            <span style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 700,
-              fontSize: '1.05rem', color: 'var(--accent)',
-              letterSpacing: '-0.01em',
-            }}>Java MSA Interviewer</span>
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <header style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-base)' }}>
+        <div className="lp-wrap" style={{ height: '72px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: 38, height: 38, flexShrink: 0, background: 'var(--accent)', borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, fontSize: '0.9rem', color: 'var(--on-accent)', fontFamily: 'var(--font-ui)',
+          }}>JM</div>
+          <div style={{ lineHeight: 1.2 }}>
+            <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+              Java MSA Interviewer
+            </div>
+            <div style={{ fontFamily: 'var(--font-code)', fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+              Developer assessment portal
+            </div>
           </div>
         </div>
       </header>
 
-      {/* ── Main ─────────────────────────────────────────────────────────── */}
-      <main style={{ paddingTop: '88px', paddingBottom: '48px', flex: 1 }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 32px' }}>
+      <main style={{ flex: 1 }}>
+        {/* ── Hero ─────────────────────────────────────────────────────── */}
+        <section style={{ position: 'relative', padding: '72px 0 56px' }}>
+          <div aria-hidden style={{
+            position: 'absolute', top: -120, left: '30%', width: 560, height: 560, pointerEvents: 'none',
+            background: 'radial-gradient(circle, rgba(164,230,255,0.10) 0%, transparent 65%)',
+          }} />
+          <div className="lp-wrap lp-hero" style={{ position: 'relative' }}>
+            {/* Left: headline */}
+            <div>
+              <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '18px' }}>
+                The engineering challenge
+              </div>
+              <h1 className="lp-h1" style={{
+                fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: '3.4rem', lineHeight: 1.05,
+                letterSpacing: '-0.03em', color: 'var(--text-primary)', marginBottom: '20px',
+              }}>
+                Think deeper.<br />
+                <span style={{ color: 'var(--accent)' }}>Code smarter.</span>
+              </h1>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.7, maxWidth: '500px', marginBottom: '32px' }}>
+                A technical challenge built for developers who love solving real problems. Put your Java,
+                Spring Boot, and microservices knowledge into action.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                {STACK.map((s, i) => (
+                  <span key={s} className="lp-chip" style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 14px', borderRadius: '999px',
+                    background: 'var(--bg-raised)', border: '1px solid var(--border)',
+                    fontFamily: 'var(--font-ui)', fontSize: '0.85rem', color: 'var(--text-primary)',
+                    transition: 'border-color .2s',
+                  }}>
+                    <span style={{ fontFamily: 'var(--font-code)', fontSize: '0.7rem', color: 'var(--accent)' }}>
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
 
-          {/* ── Hero: info card + registration panel ─────────────────────── */}
-          <section style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 420px',
-            gap: '28px',
-          }}>
-            {/* Left: Info card */}
-            <div style={{
-              position: 'relative',
-              overflow: 'hidden',
-              borderRadius: '12px',
-              background: 'var(--bg-raised)',
-              border: '1px solid var(--border)',
-              padding: '48px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              minHeight: '380px',
+            {/* Right: challenge card */}
+            <div className="lp-pad" style={{
+              position: 'relative', overflow: 'hidden', borderRadius: '16px', padding: '36px',
+              background: 'linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-raised) 100%)',
+              border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
             }}>
-              {/* Subtle radial glow */}
-              <div style={{
-                position: 'absolute', top: -100, right: -100,
-                width: 320, height: 320,
-                background: 'radial-gradient(circle, rgba(164,230,255,0.08) 0%, transparent 70%)',
-                pointerEvents: 'none',
+              <div aria-hidden style={{
+                position: 'absolute', top: -80, right: -80, width: 240, height: 240, pointerEvents: 'none',
+                background: 'radial-gradient(circle, rgba(78,222,163,0.12) 0%, transparent 70%)',
               }} />
-
-              <div style={{ position: 'relative', zIndex: 1 }}>
-                <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '14px' }}>
-                  Developer Assessment Portal
+              <div style={{ position: 'relative' }}>
+                <div className="label-caps" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
+                  Developer assessment portal
                 </div>
-                <h1 style={{
-                  fontFamily: 'var(--font-ui)',
-                  fontSize: '2.25rem',
-                  fontWeight: 800,
-                  lineHeight: 1.15,
-                  letterSpacing: '-0.02em',
-                  color: 'var(--text-primary)',
-                  marginBottom: '16px',
-                  maxWidth: '520px',
+                <h2 style={{
+                  fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: '1.6rem', lineHeight: 1.2,
+                  letterSpacing: '-0.02em', color: 'var(--text-primary)', marginBottom: '14px',
                 }}>
                   Java Spring Boot<br />
-                  <span style={{ color: 'var(--accent)' }}>Microservices</span><br />
-                  Technical Challenge
-                </h1>
-                <p style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: '1rem',
-                  lineHeight: 1.7,
-                  maxWidth: '480px',
-                  marginBottom: '28px',
-                }}>
-                  A timed, proctored assessment covering REST APIs, Service Layer, JPA,
-                  Exception Handling, WebClient, and JWT Security.
-                  Instant JavaParser analysis with GitHub Actions deep verification.
+                  <span style={{ color: 'var(--accent)' }}>Microservices</span> Technical Challenge
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.7, marginBottom: '24px' }}>
+                  Explore practical backend engineering concepts across REST APIs, service layers, JPA, exception
+                  handling, WebClient, and JWT security. A focused experience designed to highlight the way you
+                  approach software engineering.
                 </p>
-
-                {/* Tech badges */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {['Spring Boot 3.2', 'Java 17', 'JavaParser AST', 'JPA / Hibernate', 'JWT Security'].map(tag => (
-                    <span key={tag} style={{
-                      background: 'var(--accent-muted)',
-                      border: '1px solid rgba(164,230,255,0.2)',
-                      borderRadius: '6px',
-                      padding: '4px 12px',
-                      fontSize: '0.8rem',
-                      color: 'var(--accent)',
-                      fontFamily: 'var(--font-code)',
-                    }}>{tag}</span>
-                  ))}
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '18px' }}>
+                  <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '12px' }}>Inside the challenge</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {INSIDE.map(tag => (
+                      <span key={tag} style={{
+                        background: 'var(--accent-muted)', border: '1px solid rgba(164,230,255,0.2)',
+                        borderRadius: '6px', padding: '4px 10px',
+                        fontSize: '0.78rem', color: 'var(--accent)', fontFamily: 'var(--font-code)',
+                      }}>{tag}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            {/* Right: how to start */}
-            <div className="glass-panel" style={{ borderRadius: '12px', padding: '36px', display: 'flex', flexDirection: 'column' }}>
-              <div className="label-caps" style={{ color: 'var(--success)', marginBottom: '8px' }}>
-                Candidates
+        {/* ── Invitation-only ──────────────────────────────────────────── */}
+        <section style={{ padding: '24px 0 56px' }}>
+          <div className="lp-wrap">
+            <div className="lp-invite lp-pad" style={{
+              borderRadius: '16px', padding: '40px',
+              background: 'var(--bg-raised)', border: '1px solid var(--border)',
+            }}>
+              <div>
+                <h2 style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: '1.75rem',
+                  letterSpacing: '-0.02em', color: 'var(--text-primary)', marginBottom: '12px',
+                }}>
+                  <span aria-hidden style={{ color: 'var(--accent)', fontSize: '1.5rem' }}>✳</span>
+                  Good code starts with a challenge.
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.7, maxWidth: '560px' }}>
+                  Access to assessments is invitation-only. Candidates receive a personal invite link from their
+                  recruiter, with the details needed to begin their challenge.
+                </p>
               </div>
-              <h2 style={{
-                fontFamily: 'var(--font-ui)', fontWeight: 700,
-                fontSize: '1.25rem', color: 'var(--text-primary)',
-                letterSpacing: '-0.01em', marginBottom: '10px',
-              }}>
-                Start with your invite link
-              </h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.7, marginBottom: '20px' }}>
-                Assessments are by invitation only. Open the personal link your recruiter sent you —
-                it contains your challenges and starts your timed session. Each link can be used once.
-              </p>
               <div style={{
-                background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: '8px',
-                padding: '12px 14px', fontFamily: 'var(--font-code)', fontSize: '0.8rem',
-                color: 'var(--text-muted)', wordBreak: 'break-all',
+                display: 'flex', alignItems: 'center', gap: '16px', padding: '20px',
+                borderRadius: '12px', background: 'var(--bg-overlay)', border: '1px solid rgba(164,230,255,0.25)',
               }}>
-                {window.location.origin}/a/<span style={{ color: 'var(--accent)' }}>your-invite-code</span>
+                <span aria-hidden style={{
+                  width: 44, height: 44, flexShrink: 0, borderRadius: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--accent)', color: 'var(--on-accent)', fontSize: '1.25rem', fontWeight: 800,
+                }}>↗</span>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                    Personal invite access
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>A dedicated link for every candidate</div>
+                </div>
               </div>
-
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
+
+        {/* ── Tagline + features ───────────────────────────────────────── */}
+        <section style={{ padding: '8px 0 72px' }}>
+          <div className="lp-wrap">
+            <p style={{
+              textAlign: 'center', fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '1.35rem',
+              letterSpacing: '-0.01em', color: 'var(--text-primary)', marginBottom: '32px',
+            }}>
+              One challenge. Your skills. <span style={{ color: 'var(--success)' }}>Your moment to shine.</span>
+            </p>
+            <div className="lp-features">
+              {FEATURES.map(f => (
+                <div key={f.title} className="lp-card" style={{
+                  borderRadius: '14px', padding: '28px',
+                  background: 'var(--bg-raised)', border: '1px solid var(--border)',
+                }}>
+                  <div aria-hidden style={{
+                    width: 44, height: 44, borderRadius: '10px', marginBottom: '18px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--accent-muted)', border: '1px solid rgba(164,230,255,0.2)',
+                    color: 'var(--accent)', fontSize: '1.2rem',
+                  }}>{f.icon}</div>
+                  <h3 style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
+                    {f.title}
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: 1.65 }}>{f.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer style={{ borderTop: '1px solid var(--border)', padding: '28px 0' }}>
+        <div className="lp-wrap" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 800, color: 'var(--text-primary)' }}>Java MSA Interviewer</span>
+            <span style={{ fontFamily: 'var(--font-code)', fontSize: '0.75rem', color: 'var(--accent)' }}>✦ Technical challenge portal</span>
+          </div>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Built for curious minds and better code.</span>
+        </div>
+      </footer>
     </div>
   )
 }
