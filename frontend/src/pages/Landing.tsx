@@ -1,13 +1,10 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
 
 /**
  * Public home page. Candidates no longer self-register here — they start only through the
  * single-use assessment link (/a/:token) their recruiter sends them.
  */
 export default function Landing() {
-  const navigate = useNavigate()
-
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
 
@@ -138,25 +135,11 @@ export default function Landing() {
               <div style={{
                 background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: '8px',
                 padding: '12px 14px', fontFamily: 'var(--font-code)', fontSize: '0.8rem',
-                color: 'var(--text-muted)', marginBottom: '28px', wordBreak: 'break-all',
+                color: 'var(--text-muted)', wordBreak: 'break-all',
               }}>
                 {window.location.origin}/a/<span style={{ color: 'var(--accent)' }}>your-invite-code</span>
               </div>
 
-              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-                <div className="label-caps" style={{ color: 'var(--text-muted)', marginBottom: '10px' }}>Recruiters</div>
-                <button
-                  onClick={() => navigate('/recruiter')}
-                  style={{
-                    width: '100%', padding: '11px 20px',
-                    background: 'var(--accent-muted)', border: '1px solid rgba(164,230,255,0.3)',
-                    borderRadius: '8px', color: 'var(--accent)', cursor: 'pointer',
-                    fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: '0.9rem',
-                  }}
-                >
-                  Recruiter sign in →
-                </button>
-              </div>
             </div>
           </section>
         </div>
